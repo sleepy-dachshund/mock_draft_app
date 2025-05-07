@@ -1,0 +1,70 @@
+# Cursor Rules
+
+# Language: Python
+# Use Python 3.10+ features where appropriate.
+
+# Code Style:
+# Follow PEP 8 guidelines for code formatting. Use a linter like Flake8 or Ruff and a formatter like Black.
+# Max line length: 100 characters.
+
+# Documentation:
+# Use NumPy style docstrings for all modules, classes, and functions.
+# Docstrings should clearly explain the purpose, parameters, return values, and any exceptions raised.
+# Example:
+# def example_function(param1: int, param2: str) -> bool:
+#     """
+#     Brief description of the function's purpose.
+#
+#     More detailed explanation if necessary.
+#
+#     Parameters
+#     ----------
+#     param1 : int
+#         Description of the first parameter.
+#     param2 : str
+#         Description of the second parameter.
+#
+#     Returns
+#     -------
+#     bool
+#         Description of the return value.
+#
+#     Raises
+#     ------
+#     ValueError
+#         If param1 is negative.
+#     """
+#     if param1 < 0:
+#         raise ValueError("param1 cannot be negative")
+#     # Function logic here
+#     return True
+
+# DataFrame Handling:
+# If a function's returned object is a pandas dataframe, be sure to note the high level details in the documentation, e.g.,
+#     Returns
+#     -------
+#     pd.DataFrame
+#         Description of the DataFrame.
+#         Index: datetime, standard numeric, or something categorical like "name" or "city"
+#         Columns: list the column names ['date', 'state', 'city', 'value1', 'value2', ... ]
+
+
+# Type Hinting:
+# Use type hints for all function signatures (parameters and return types) within the function definition.
+# Use types from the `typing` module where necessary (e.g., `list`, `dict`, `tuple`, `Optional`, `Union`).
+
+# File Structure:
+# Organize code logically into modules/files (e.g., `data_loader.py`, `data_cleaner.py`, `player_matcher.py`, `calculations.py`, `main.py`).
+
+# Error Handling:
+# Use specific exception types where appropriate.
+# Handle potential errors gracefully (e.g., file not found, invalid data format).
+
+# Dependencies:
+# Manage dependencies using `requirements.txt`.
+
+# Version Control:
+# Use Git for version control. Commit frequently with clear, descriptive messages.
+
+# Specific Libraries:
+# Prefer pandas for data manipulation.
