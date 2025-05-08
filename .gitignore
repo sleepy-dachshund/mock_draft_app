@@ -1,0 +1,14 @@
+data/input/2025/projections/20250506_DraftSharks.csv
+.DS_Store
+.idea/fantasy_football.iml
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/material_theme_project_new.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
+data/input/2025/historical/historical_2025.csv
+data/input/2025/projections/20250506_DSConsensus.csv
+data/input/2025/projections/20250506_FPro.csv
+data/input/2025/projections/20250506_FantasyPoints.csv
+data/input/2025/projections/20250506_FTN.csv
+data/input/2025/projections/20250506_PFF.csv
