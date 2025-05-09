@@ -98,17 +98,17 @@ class DataMerger:
             Merged DataFrame with unique player_id.
         """
 
-        if not cleaned_projections:
+        if not self.cleaned_projections:
             return pd.DataFrame()
 
         # Create initial DataFrame from the first projection
-        merged_df = cleaned_projections[0].copy()
+        merged_df = self.cleaned_projections[0].copy()
 
         # Add player_id to each cleaned projection DataFrame
         merged_df = self._add_player_id(merged_df)
 
         # Merge each subsequent projection DataFrame on 'player_id'
-        for n, df in enumerate(cleaned_projections[1:], start=1):
+        for n, df in enumerate(self.cleaned_projections[1:], start=1):
             # Add player_id to the current DataFrame
             df = self._add_player_id(df)
             merged_df = merged_df.merge(df, on='player_id', how='outer', suffixes=('', f'_{n}'))
