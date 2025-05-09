@@ -118,14 +118,14 @@ class DataMerger:
 
         # Sort by the sum of projection points columns to keep rows with highest projections
         projection_cols = [col for col in merged_df.columns if col.startswith('projection_points_ppr')]
-        merged_df['sum_proj'] = merged_df[projection_cols].sum(axis=1)
-        merged_df.sort_values('sum_proj', ascending=False, inplace=True)
+        merged_df['avg_proj'] = merged_df[projection_cols].mean(axis=1)
+        merged_df.sort_values('avg_proj', ascending=False, inplace=True)
 
         # Drop duplicates, keeping the row with the highest sum of projections
         merged_df.drop_duplicates(subset=['player_id'], keep='first', inplace=True)
 
         # Drop the sum_proj column
-        merged_df.drop(columns=['sum_proj'], inplace=True)
+        merged_df.drop(columns=['avg_proj'], inplace=True)
 
         # Reset index
         merged_df.reset_index(drop=True, inplace=True)
