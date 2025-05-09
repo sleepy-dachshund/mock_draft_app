@@ -30,6 +30,9 @@ ROSTER_N_K = 0
 ROSTER_N_DST = 0
 ROSTER_N_BENCH = 7
 
+PROJECTION_COLUMN_PREFIX = "projection_points_ppr"
+POSITION_COLUMN = "position_abbr_standardized"
+
 # Base directory paths
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = BASE_DIR / "data"
@@ -130,15 +133,15 @@ COLUMN_NAME_MAPPINGS = {
     "depth chart position": "position_abbr",
     
     # Projection variations
-    "proj. pts": "projection_points_ppr",
-    "ppr_projection": "projection_points_ppr",
-    "fpts": "projection_points_ppr",
-    "ppr": "projection_points_ppr",
-    "proj_ppr": "projection_points_ppr",
-    "points": "projection_points_ppr",
-    "fantasy points": "projection_points_ppr",
-    "projection": "projection_points_ppr",
-    "projected points": "projection_points_ppr",
+    "proj. pts": PROJECTION_COLUMN_PREFIX,
+    "ppr_projection": PROJECTION_COLUMN_PREFIX,
+    "fpts": PROJECTION_COLUMN_PREFIX,
+    "ppr": PROJECTION_COLUMN_PREFIX,
+    "proj_ppr": PROJECTION_COLUMN_PREFIX,
+    "points": PROJECTION_COLUMN_PREFIX,
+    "fantasy points": PROJECTION_COLUMN_PREFIX,
+    "projection": PROJECTION_COLUMN_PREFIX,
+    "projected points": PROJECTION_COLUMN_PREFIX,
     
     # Rank variations
     "rank": "rank",
@@ -257,12 +260,12 @@ SCALING_METHOD = "historical"
 
 # Number of top players per position to use as benchmark set
 BENCHMARK_PLAYER_COUNTS = {
-    "QB": 10,
+    "QB": 16,
     "RB": 24,
-    "WR": 32,
-    "TE": 12,
-    "K": 10,
-    "DST": 32
+    "WR": 40,
+    "TE": 15,
+    # "K": 10,
+    # "DST": 32
 }
 
 # Limits on scaling factors to prevent extreme adjustments
