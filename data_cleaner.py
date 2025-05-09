@@ -526,31 +526,21 @@ if __name__ == "__main__":
     import config
     from data_loader import DataLoader
     
-    # Initialize DataLoader
+    # Prep for Example Usage
     loader = DataLoader(
         season_year=config.SEASON_YEAR,
         historical_year=config.HISTORICAL_YEAR,
         projections_dir=str(config.PROJECTIONS_DIR),
         historical_dir=str(config.HISTORICAL_DIR)
     )
-    
-    # Load data
     projection_dfs = loader.load_projections()
     historical_df = loader.load_historical()
-    
-    # Get source experts from filenames
-    source_experts = [f"expert_{i+1}" for i in range(len(projection_dfs))]
-    
-    # Initialize DataCleaner
+
+    # Example Usage
     cleaner = DataCleaner(config)
-    
-    # Clean projection data
+    source_experts = [f"expert_{i + 1}" for i in range(len(projection_dfs))]
     cleaned_projections = cleaner.clean_projection_dataframes(projection_dfs, source_experts)
-    
-    # Clean historical data
     cleaned_historical = cleaner.clean_historical_dataframe(historical_df)
-    
-    # Print results
     print(f"Cleaned {len(cleaned_projections)} projection datasets")
     if not cleaned_historical.empty:
         print(f"Cleaned historical data with {len(cleaned_historical)} rows")

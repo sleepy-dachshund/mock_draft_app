@@ -63,6 +63,8 @@ class DataLoader:
             return None
 
 if __name__ == '__main__':
+
+    # Example usage
     loader = DataLoader(season_year='2025', historical_year='2024', projections_dir='data/input/2025/projections/', historical_dir='data/input/2025/historical/')
     projections = loader.load_projections()
     historical = loader.load_historical()

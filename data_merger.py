@@ -4,7 +4,9 @@ import numpy as np
 import logging
 import os
 import re
-from typing import List, Dict, Tuple, Optional, Union
+from typing import List, Dict, Tuple, Optional, Union, Any
+
+from pandas import DataFrame, Series
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -81,7 +83,7 @@ class DataMerger:
 
         return df
 
-    def merge_projections_on_player_id(self) -> pd.DataFrame:
+    def merge_projections_on_player_id(self) -> DataFrame | tuple[Any, Any]:
         """
         Merge all cleaned projections on player_id and create a single DataFrame.
 
@@ -133,7 +135,16 @@ class DataMerger:
         # Drop unnecessary columns
         merged_df = self._clean_merged_df_columns(merged_df)
 
-        return merged_df
+        # Generate Flag DF
+        flag_df = merged_df.iloc[:200].copy()
+        flag_df['flag'] = np.where(flag_df.isna().any(axis=1), True, False)
+        flag_df = flag_df.loc[flag_df['flag'] == True]
+
+        # Remove player_ids from merged df that are in flag df
+        merged_df = merged_df[~merged_df['player_id'].isin(flag_df['player_id'])]
+        merged_df.reset_index(drop=True, inplace=True)
+
+        return merged_df, flag_df
 
 
 if __name__ == "__main__":
@@ -141,35 +152,19 @@ if __name__ == "__main__":
     from data_loader import DataLoader
     from data_cleaner import DataCleaner
 
-    # Example usage
+    # Prep for example usage
     loader = DataLoader(
         season_year=config.SEASON_YEAR,
         historical_year=config.HISTORICAL_YEAR,
         projections_dir=str(config.PROJECTIONS_DIR),
         historical_dir=str(config.HISTORICAL_DIR)
     )
-
-    # Load data
     projection_dfs = loader.load_projections()
     historical_df = loader.load_historical()
-
-    # Get source experts from filenames
     source_experts = [f"expert_{i + 1}" for i in range(len(projection_dfs))]
-
-    # Initialize DataCleaner
     cleaner = DataCleaner(config)
-
-    # Clean projection data
     cleaned_projections = cleaner.clean_projection_dataframes(projection_dfs, source_experts)
 
-    # Initialize DataMerger
+    # Example usage
     merger = DataMerger(config, cleaned_projections)
-
-    # Merge projections on player_id
-    merged_df = merger.merge_projections_on_player_id()
-
-    # flag any NaNs in the first 150 rows
-    flag_df = merged_df.iloc[:200].copy()
-    flag_df['flag'] = np.where(flag_df.isna().any(axis=1), True, False)
-    flag_df = flag_df.loc[flag_df['flag'] == True]
-
+    merged_df, flag_df = merger.merge_projections_on_player_id()
