@@ -54,7 +54,7 @@
 # Use types from the `typing` module where necessary (e.g., `list`, `dict`, `tuple`, `Optional`, `Union`).
 
 # File Structure:
-# Organize code logically into modules/files (e.g., `data_loader.py`, `data_cleaner.py`, `player_matcher.py`, `calculations.py`, `main.py`).
+# Organize code logically into modules/files (e.g., `data_loader.py`, `data_cleaner.py`, `player_matcher.py`, `main.py`, etc.).
 
 # Error Handling:
 # Use specific exception types where appropriate.
@@ -62,9 +62,6 @@
 
 # Dependencies:
 # Manage dependencies using `requirements.txt`.
-
-# Version Control:
-# Use Git for version control. Commit frequently with clear, descriptive messages.
 
 # Specific Libraries:
 # Prefer pandas for data manipulation.
