@@ -155,9 +155,8 @@ class DataCleaner:
         
         # 1. Standardize column names
         df = self._standardize_column_names(df, source_expert)
-        if df is None:
-            # log that source expert cleaning failed at this step
-            logger.error(f"Failed to standardize column names for {source_expert}")
+
+        if df is None:  # Likely no projection points column found. Check log.
             return None
             
         # 2. Clean player names
@@ -278,6 +277,10 @@ class DataCleaner:
             # Convert to string, strip whitespace, and convert to lowercase
             df['cleaned_player_name'] = df['raw_player_name'].astype(str).str.strip().str.lower()
             df['cleaned_player_name'] = df['cleaned_player_name'].str.replace(r"[^\w\s'.-]", "", regex=True)
+
+            # map player names using PLAYER_NAME_MAPPINGS only if cleaned_player_name is in PLAYER_NAME_MAPPINGS values
+            df['cleaned_player_name'] = np.where(df['cleaned_player_name'].isin(self.config.PLAYER_NAME_MAPPINGS.keys()), df['cleaned_player_name'].map(self.config.PLAYER_NAME_MAPPINGS), df['cleaned_player_name'])
+
             logger.debug(f"Player names cleaned for {source_expert}")
         else:
             logger.warning(f"raw_player_name column not found in {source_expert}")

@@ -104,6 +104,12 @@ HISTORICAL_FILE_PATTERN = "*_actuals.csv"
 # DATA CLEANING SETTINGS
 # ===============================
 
+PLAYER_NAME_MAPPINGS = {
+    'cam ward': 'cameron ward',
+    'cam skattebo': 'cameron skattebo',
+    'josh palmer': 'joshua palmer',
+}
+
 # Column name standardization mappings
 # Maps various column names from different sources to our standard names
 COLUMN_NAME_MAPPINGS = {
