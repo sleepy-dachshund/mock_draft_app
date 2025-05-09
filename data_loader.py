@@ -5,7 +5,7 @@ import pandas as pd
 import os
 
 class DataLoader:
-    def __init__(self, season_year: str, projections_dir: str, historical_dir: str) -> None:
+    def __init__(self, season_year: str, historical_year: str, projections_dir: str, historical_dir: str) -> None:
         """
         Initialize the DataLoader with specified directories.
 
@@ -13,12 +13,15 @@ class DataLoader:
         ----------
         season_year : str
             The year for which the data is being loaded.
+        historical_year : str
+            The year for which historical data is being loaded.
         projections_dir : str
             The directory path where projection CSV files are located.
         historical_dir : str
             The directory path where historical CSV files are located.
         """
         self.season_year = season_year
+        self.historical_year = historical_year
         self.projections_dir = projections_dir
         self.historical_dir = historical_dir
 
@@ -51,7 +54,7 @@ class DataLoader:
         pandas.DataFrame or None
             A DataFrame containing historical data if successful, otherwise None.
         """
-        historical_file = os.path.join(self.historical_dir, f'historical_{self.season_year}.csv')
+        historical_file = os.path.join(self.historical_dir, f'{self.historical_year}_actuals.csv')
         try:
             historical_data = pd.read_csv(historical_file)
             return historical_data
@@ -60,6 +63,6 @@ class DataLoader:
             return None
 
 if __name__ == '__main__':
-    loader = DataLoader(season_year='2025', projections_dir='data/input/2025/projections/', historical_dir='data/input/2025/historical/')
+    loader = DataLoader(season_year='2025', historical_year='2024', projections_dir='data/input/2025/projections/', historical_dir='data/input/2025/historical/')
     projections = loader.load_projections()
     historical = loader.load_historical()
