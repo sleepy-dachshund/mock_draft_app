@@ -14,6 +14,7 @@ from datetime import datetime
 
 # Active season year (the year for which projections are being analyzed)
 SEASON_YEAR = 2025
+HISTORICAL_YEAR = SEASON_YEAR - 1
 
 DRAFT_POSITION = 5
 N_TEAMS = 10
@@ -49,7 +50,7 @@ for dir_path in [PROJECTIONS_DIR, HISTORICAL_DIR, PROCESSED_DIR, OUTPUT_DIR]:
 # Logging configuration
 LOG_DIR = BASE_DIR / "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = LOG_DIR / f"fantasy_football_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+LOG_FILE = LOG_DIR / f"ff_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 LOG_LEVEL = "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # ===============================
@@ -126,6 +127,7 @@ COLUMN_NAME_MAPPINGS = {
     "proj. pts": "projection_points_ppr",
     "ppr_projection": "projection_points_ppr",
     "fpts": "projection_points_ppr",
+    "ppr": "projection_points_ppr",
     "proj_ppr": "projection_points_ppr",
     "points": "projection_points_ppr",
     "fantasy points": "projection_points_ppr",
@@ -136,6 +138,7 @@ COLUMN_NAME_MAPPINGS = {
     "rank": "rank",
     "overall rank": "rank",
     "ovr": "rank",
+    "overall_rank": "rank",
 
     # position rank variations
     "pos_rank": "position_rank",
@@ -159,13 +162,13 @@ TEAM_ABBR_MAPPINGS = {
     "nyj": "NYJ", "new york jets": "NYJ", "jets": "NYJ",
     
     # AFC North
-    "bal": "BAL", "baltimore": "BAL", "ravens": "BAL",
+    "bal": "BAL", "blt": "BAL", "ravens": "BAL",
     "cin": "CIN", "cincinnati": "CIN", "bengals": "CIN",
-    "cle": "CLE", "cleveland": "CLE", "browns": "CLE",
+    "cle": "CLE", "cleveland": "CLE", "browns": "CLE", "clv": "CLE",
     "pit": "PIT", "pittsburgh": "PIT", "steelers": "PIT",
     
     # AFC South
-    "hou": "HOU", "houston": "HOU", "texans": "HOU",
+    "hou": "HOU", "houston": "HOU", "texans": "HOU", "hst": "HOU",
     "ind": "IND", "indianapolis": "IND", "colts": "IND",
     "jac": "JAX", "jacksonville": "JAX", "jaguars": "JAX", "jax": "JAX",
     "ten": "TEN", "tennessee": "TEN", "titans": "TEN",
@@ -195,19 +198,22 @@ TEAM_ABBR_MAPPINGS = {
     "tb": "TB", "tampa bay": "TB", "buccaneers": "TB", "bucs": "TB", "tam": "TB",
     
     # NFC West
-    "ari": "ARI", "arizona": "ARI", "cardinals": "ARI", "az": "ARI",
+    "ari": "ARI", "arizona": "ARI", "cardinals": "ARI", "az": "ARI", "arz": "ARI",
     "la": "LAR", "los angeles": "LAR", "rams": "LAR", "lar": "LAR",
     "sf": "SF", "san francisco": "SF", "49ers": "SF", "sfo": "SF",
     "sea": "SEA", "seattle": "SEA", "seahawks": "SEA",
     
     # Free agents
-    "fa": "FA", "free agent": "FA", "none": "FA", "": "FA", "nan": "FA",
+    "fa": "FA", "free agent": "FA", "none": "FA", "": "FA", "nan": "FA", "uns": "FA",
+
+    # multiple teams (for historical data)
+    "multiple": "MULT", "mult": "MULT", "multiple teams": "MULT", "2tm": "MULT", "3tm": "MULT",
 }
 
 # Position abbreviation standardization
 POSITION_ABBR_MAPPINGS = {
     "quarterback": "QB", "qb": "QB",
-    "running back": "RB", "rb": "RB", "halfback": "RB", "hb": "RB", "tailback": "RB",
+    "running back": "RB", "rb": "RB", "halfback": "RB", "hb": "RB", "fb": "RB",
     "wide receiver": "WR", "wr": "WR",
     "tight end": "TE", "te": "TE",
     "kicker": "K", "k": "K", "pk": "K", "placekicker": "K",
