@@ -52,11 +52,34 @@ class DataMerger:
         """
 
         # create new column to rank each player by projection_points_ppr desc grouped by team and position and convert to string for player_id
-        df['rank_by_team_pos'] = df.groupby(['team_abbr_standardized', 'position_abbr_standardized'])['projection_points_ppr'].rank(method='dense', ascending=False).astype(str)
+        df['rank_by_team_pos'] = df.groupby(['team_abbr_standardized', 'position_abbr_standardized'])[self.config.PROJECTION_COLUMN_PREFIX].rank(method='dense', ascending=False).astype(str)
 
         # Create a unique player ID based on cleaned_player_name and team_abbr_standardized, e.g. 'WAS_QB_1_jay'
         df['player_id'] = (df['team_abbr_standardized'] + "_" + df['position_abbr_standardized'] + "_" +  # df['rank_by_team_pos'] + "_" +
                            df['cleaned_player_name'].str.replace(r'\s+','', regex=True).str.replace(r'[^\w\s]','', regex=True).str[:5])
+
+        return df
+
+    def _rename_projection_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Rename projection columns in the DataFrame to include the source expert name.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame with projection columns to be renamed.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with renamed projection columns.
+        """
+
+        # Rename projection columns to include the source expert name
+        for col in df.columns:
+            if col.startswith(self.config.PROJECTION_COLUMN_PREFIX):
+                new_col_name = f"{col}_{df['source_expert'].iloc[0]}"
+                df.rename(columns={col: new_col_name}, inplace=True)
 
         return df
 
@@ -75,8 +98,8 @@ class DataMerger:
             Cleaned DataFrame.
         """
 
-        cols_to_keep = ['player_id', 'cleaned_player_name', 'team_abbr_standardized', 'position_abbr_standardized']
-        col_flag_to_keep = 'projection_points_ppr'
+        cols_to_keep = ['player_id', 'cleaned_player_name', 'team_abbr_standardized']
+        col_flag_to_keep = self.config.PROJECTION_COLUMN_PREFIX
         cols_to_keep.extend([col for col in df.columns if col.startswith(col_flag_to_keep)])
 
         df = df[cols_to_keep]
@@ -107,10 +130,18 @@ class DataMerger:
         # Add player_id to each cleaned projection DataFrame
         merged_df = self._add_player_id(merged_df)
 
+        # Rename projection columns to include the source expert name
+        merged_df = self._rename_projection_columns(merged_df)
+
         # Merge each subsequent projection DataFrame on 'player_id'
         for n, df in enumerate(self.cleaned_projections[1:], start=1):
+
             # Add player_id to the current DataFrame
             df = self._add_player_id(df)
+
+            # Rename projection columns to include the source expert name
+            df = self._rename_projection_columns(df)
+
             merged_df = merged_df.merge(df, on='player_id', how='outer', suffixes=('', f'_{n}'))
 
             # fill names, teams, positions in case of missing players
@@ -119,7 +150,7 @@ class DataMerger:
             merged_df['position_abbr_standardized'].fillna(merged_df[f'position_abbr_standardized_{n}'], inplace=True)
 
         # Sort by the sum of projection points columns to keep rows with highest projections
-        projection_cols = [col for col in merged_df.columns if col.startswith('projection_points_ppr')]
+        projection_cols = [col for col in merged_df.columns if col.startswith(self.config.PROJECTION_COLUMN_PREFIX)]
         merged_df['avg_proj'] = merged_df[projection_cols].mean(axis=1)
         merged_df.sort_values('avg_proj', ascending=False, inplace=True)
 
@@ -159,9 +190,8 @@ if __name__ == "__main__":
         projections_dir=str(config.PROJECTIONS_DIR),
         historical_dir=str(config.HISTORICAL_DIR)
     )
-    projection_dfs = loader.load_projections()
+    projection_dfs, source_experts = loader.load_projections()
     historical_df = loader.load_historical()
-    source_experts = [f"expert_{i + 1}" for i in range(len(projection_dfs))]
     cleaner = DataCleaner(config)
     cleaned_projections = cleaner.clean_projection_dataframes(projection_dfs, source_experts)
 
