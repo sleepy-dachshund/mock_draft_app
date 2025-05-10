@@ -98,7 +98,7 @@ class DataMerger:
             Cleaned DataFrame.
         """
 
-        cols_to_keep = ['player_id', 'cleaned_player_name', 'team_abbr_standardized']
+        cols_to_keep = ['player_id', 'cleaned_player_name', 'team_abbr_standardized', 'position_abbr_standardized']
         col_flag_to_keep = self.config.PROJECTION_COLUMN_PREFIX
         cols_to_keep.extend([col for col in df.columns if col.startswith(col_flag_to_keep)])
 
