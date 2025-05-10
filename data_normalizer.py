@@ -4,7 +4,6 @@ import logging
 import os
 import re
 from typing import List, Dict, Tuple, Optional, Union, Any
-
 from pandas import DataFrame, Series
 
 # Set up logging
@@ -201,6 +200,16 @@ class DataNormalizer:
         normalized_df = self.projections_df.copy()  # Work on a copy of the input DataFrame
         normalized_df = self._apply_normalization(normalized_df, projection_cols, normalization_factors)
 
+        # convert float cols in normalized_df to float with 1 decimal
+        float_cols = normalized_df.select_dtypes(include=['float64']).columns
+        for col in float_cols:
+            normalized_df[col] = normalized_df[col].round(1)
+
+        normalized_df.rename(columns={'player_id': 'id',
+                                      'cleaned_player_name': 'player',
+                                      'position_abbr_standardized': 'position',
+                                      'team_abbr_standardized': 'team'}, inplace=True)
+
         self.last_normalization_factors = normalization_factors
 
         logger.info("Projection data normalization complete.")
@@ -220,10 +229,8 @@ if __name__ == "__main__":
         projections_dir=str(config.PROJECTIONS_DIR),
         historical_dir=str(config.HISTORICAL_DIR)
     )
-    projection_dfs = loader.load_projections()
+    projection_dfs, source_experts = loader.load_projections()
     historical_df = loader.load_historical()
-
-    source_experts = [f"expert_{i + 1}" for i in range(len(projection_dfs))]
 
     cleaner = DataCleaner(config)
     cleaned_projections = cleaner.clean_projection_dataframes(projection_dfs, source_experts)
@@ -236,10 +243,11 @@ if __name__ == "__main__":
     normalizer = DataNormalizer(config, merged_df)
     normalized_df = normalizer.normalize_projection_data()
 
-    # # Display normalization factors
-    # print("\nApplied Normalization Multipliers (Factors):")
-    # for proj_col, factors_by_pos in getattr(normalizer, 'last_normalization_factors', {}).items():
-    #     print(f"  For '{proj_col}': " + ", ".join([f"{pos}: {factor:.4f}" for pos, factor in factors_by_pos.items()]))
+    # Display normalization factors
+    print("\nApplied Normalization Multipliers (Factors):")
+    for proj_col, factors_by_pos in getattr(normalizer, 'last_normalization_factors', {}).items():
+        print(f"  For '{proj_col}': " + ", ".join([f"{pos}: {factor:.4f}" for pos, factor in factors_by_pos.items()]))
+
     #
     # # Verification step
     # print("\nVerifying normalization (conceptual):")
