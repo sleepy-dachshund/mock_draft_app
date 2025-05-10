@@ -155,6 +155,14 @@ class DataNormalizer:
                         df_to_normalize.loc[position_mask, proj_col] * factor
         return df_to_normalize
 
+    def get_normalization_factors(self) -> pd.DataFrame:
+        """
+        Returns a DataFrame of normalization factors with projection column names as index,
+        position abbreviations as columns, and normalization factors as values.
+        """
+        factors_dict = getattr(self, 'last_normalization_factors', {})
+        return pd.DataFrame.from_dict(factors_dict, orient='index')
+
     def normalize_projection_data(self) -> pd.DataFrame:
         """
         Normalizes projection data based on average benchmark sums across projection sources.
@@ -242,11 +250,7 @@ if __name__ == "__main__":
     # Example usage
     normalizer = DataNormalizer(config, merged_df)
     normalized_df = normalizer.normalize_projection_data()
-
-    # Display normalization factors
-    print("\nApplied Normalization Multipliers (Factors):")
-    for proj_col, factors_by_pos in getattr(normalizer, 'last_normalization_factors', {}).items():
-        print(f"  For '{proj_col}': " + ", ".join([f"{pos}: {factor:.4f}" for pos, factor in factors_by_pos.items()]))
+    normalization_factors_df = normalizer.get_normalization_factors()
 
     #
     # # Verification step
