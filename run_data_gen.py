@@ -15,7 +15,7 @@ from data_normalizer import DataNormalizer
 # Set up logging
 logger = logging.getLogger(__name__)
 
-def data_gen():
+def data_gen(save_output: bool = True) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
 
     # load data
     loader = DataLoader(
@@ -41,15 +41,16 @@ def data_gen():
     normalized_df = normalizer.normalize_projection_data()
     normalization_factors_df = normalizer.get_normalization_factors()
 
-    # save data
-    today = pd.Timestamp.today().strftime("%Y%m%d")
+    if save_output:
+        # save data
+        today = pd.Timestamp.today().strftime("%Y%m%d")
 
-    normalized_df.to_excel(f"{config.OUTPUT_DIR}/{today}_normalized.xlsx", index=False)
-    normalization_factors_df.to_excel(f"{config.OUTPUT_DIR}/{today}_normalization_factors.xlsx", index=True)
-    merged_df.to_excel(f"{config.OUTPUT_DIR}/{today}_merged.xlsx", index=False)
-    flag_df.to_excel(f"{config.OUTPUT_DIR}/{today}_flags.xlsx", index=False)
+        normalized_df.to_excel(f"{config.OUTPUT_DIR}/{today}_normalized.xlsx", index=False)
+        normalization_factors_df.to_excel(f"{config.OUTPUT_DIR}/{today}_normalization_factors.xlsx", index=True)
+        merged_df.to_excel(f"{config.OUTPUT_DIR}/{today}_merged.xlsx", index=False)
+        flag_df.to_excel(f"{config.OUTPUT_DIR}/{today}_flags.xlsx", index=False)
 
     return normalized_df, normalization_factors_df, merged_df, flag_df
 
 if __name__ == "__main__":
-    normalized_df, normalization_factors_df, merged_df, flag_df = data_gen()
+    normalized_df, normalization_factors_df, merged_df, flag_df = data_gen(save_output=True)
