@@ -30,7 +30,7 @@ ROSTER_N_K = 0
 ROSTER_N_DST = 0
 ROSTER_N_BENCH = 7
 
-PROJECTION_COLUMN_PREFIX = "projection_points_ppr"
+PROJECTION_COLUMN_PREFIX = "projection"
 POSITION_COLUMN = "position_abbr_standardized"
 
 # Base directory paths
