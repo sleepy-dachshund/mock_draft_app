@@ -4,6 +4,9 @@ import os
 import pandas as pd
 import os
 
+from pandas import DataFrame
+
+
 class DataLoader:
     def __init__(self, season_year: str, historical_year: str, projections_dir: str, historical_dir: str) -> None:
         """
@@ -25,7 +28,7 @@ class DataLoader:
         self.projections_dir = projections_dir
         self.historical_dir = historical_dir
 
-    def load_projections(self) -> list:
+    def load_projections(self) -> tuple[list[DataFrame], list[str]]:
         """
         Load all projection CSV files from the projections directory.
 
@@ -35,15 +38,22 @@ class DataLoader:
             A list of pandas DataFrames, each containing data from a projection CSV file.
         """
         projections = []
+        source_experts = []
         for filename in os.listdir(self.projections_dir):
             if filename.endswith('.csv'):
                 file_path = os.path.join(self.projections_dir, filename)
                 try:
                     df = pd.read_csv(file_path)
+
+                    # Extract the expert name from the filename
+                    expert_name = filename.split('.')[-2].split('_')[-1]
+                    df['source_expert'] = expert_name
+
                     projections.append(df)
+                    source_experts.append(expert_name)
                 except Exception as e:
                     print(f"Error loading {filename}: {e}")
-        return projections
+        return projections, source_experts
 
     def load_historical(self) -> pd.DataFrame | None:
         """
@@ -66,5 +76,5 @@ if __name__ == '__main__':
 
     # Example usage
     loader = DataLoader(season_year='2025', historical_year='2024', projections_dir='data/input/2025/projections/', historical_dir='data/input/2025/historical/')
-    projections = loader.load_projections()
+    projections, source_experts = loader.load_projections()
     historical = loader.load_historical()
