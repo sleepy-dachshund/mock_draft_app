@@ -86,9 +86,6 @@ class DataCleaner:
             source_expert = source_experts[i]
             logger.info(f"Cleaning data from source: {source_expert}")
             
-            # Add source_expert column
-            df['source_expert'] = source_expert
-            
             try:
                 cleaned_df = self._clean_dataframe(df, source_expert)
                 if cleaned_df is not None and not cleaned_df.empty:
@@ -216,9 +213,9 @@ class DataCleaner:
         # Check for projection points column
         projection_points_found = False
         for col in df.columns:
-            if isinstance(col, str) and col in self.config.COLUMN_NAME_MAPPINGS and self.config.COLUMN_NAME_MAPPINGS[col] == 'projection_points_ppr':
+            if isinstance(col, str) and col in self.config.COLUMN_NAME_MAPPINGS and self.config.COLUMN_NAME_MAPPINGS[col] == self.config.PROJECTION_COLUMN_PREFIX:
                 projection_points_found = True
-                df['projection_points_ppr'] = df[col]
+                df[self.config.PROJECTION_COLUMN_PREFIX] = df[col]
                 break
                 
         if not projection_points_found:
@@ -400,17 +397,17 @@ class DataCleaner:
             DataFrame with cleaned data types.
         """
         # Clean projection_points_ppr
-        if 'projection_points_ppr' in df.columns:
+        if self.config.PROJECTION_COLUMN_PREFIX in df.columns:
             # Convert to string first to handle non-string types
-            df['projection_points_ppr'] = df['projection_points_ppr'].astype(str)
+            df[self.config.PROJECTION_COLUMN_PREFIX] = df[self.config.PROJECTION_COLUMN_PREFIX].astype(str)
             
             # Remove non-numeric characters except decimal point and minus sign
-            df['projection_points_ppr'] = df['projection_points_ppr'].str.replace(r'[^\d.-]', '', regex=True)
+            df[self.config.PROJECTION_COLUMN_PREFIX] = df[self.config.PROJECTION_COLUMN_PREFIX].str.replace(r'[^\d.-]', '', regex=True)
             
             # Convert to numeric, errors become NaN
-            df['projection_points_ppr'] = pd.to_numeric(df['projection_points_ppr'], errors='coerce')
+            df[self.config.PROJECTION_COLUMN_PREFIX] = pd.to_numeric(df[self.config.PROJECTION_COLUMN_PREFIX], errors='coerce')
             
-            logger.debug(f"projection_points_ppr cleaned for {source_expert}")
+            logger.debug(f"{self.config.PROJECTION_COLUMN_PREFIX} cleaned for {source_expert}")
         
         # Clean rank if present
         if 'rank' in df.columns:
@@ -468,10 +465,10 @@ class DataCleaner:
             df = df[~name_mask]
             
         # Drop rows where projection_points_ppr is NaN
-        proj_mask = df['projection_points_ppr'].isna()
+        proj_mask = df[self.config.PROJECTION_COLUMN_PREFIX].isna()
         proj_drop_count = proj_mask.sum()
         if proj_drop_count > 0:
-            logger.warning(f"Dropping {proj_drop_count} rows with missing projection points from {source_expert}")
+            logger.warning(f"Dropping {proj_drop_count} rows with missing projections from {source_expert}")
             df = df[~proj_mask]
             
         # Log total rows dropped
@@ -502,7 +499,7 @@ class DataCleaner:
             'cleaned_player_name',
             'team_abbr_standardized',
             'position_abbr_standardized',
-            'projection_points_ppr'
+            self.config.PROJECTION_COLUMN_PREFIX
         ]
         
         # Add optional columns if they exist
@@ -533,12 +530,11 @@ if __name__ == "__main__":
         projections_dir=str(config.PROJECTIONS_DIR),
         historical_dir=str(config.HISTORICAL_DIR)
     )
-    projection_dfs = loader.load_projections()
+    projection_dfs, source_experts = loader.load_projections()
     historical_df = loader.load_historical()
 
     # Example Usage
     cleaner = DataCleaner(config)
-    source_experts = [f"expert_{i + 1}" for i in range(len(projection_dfs))]
     cleaned_projections = cleaner.clean_projection_dataframes(projection_dfs, source_experts)
     cleaned_historical = cleaner.clean_historical_dataframe(historical_df)
     print(f"Cleaned {len(cleaned_projections)} projection datasets")
