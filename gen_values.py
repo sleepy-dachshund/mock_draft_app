@@ -92,7 +92,7 @@ class ProjectionValueCalculator:
             baseline_player = baseline_row['player']
             baseline_projection = baseline_row[projection_column]
 
-            logger.info(f"Baseline '{value_threshold_name}' for {position}: "
+            logger.debug(f"Baseline '{value_threshold_name}' for {position}: "
                         f"{baseline_player}, {baseline_projection}")
 
             # Update baseline dictionary
@@ -107,7 +107,90 @@ class ProjectionValueCalculator:
 
         return self.df
 
-    def calc_static_value(self, value_col: str) -> None:
+    def add_vop_columns(self,
+                        projection_column: str = 'median_projection',
+                        n: int = 5) -> DataFrame:
+        """
+        Add VOP (Value Over Player) columns from 1 to N.
+
+        VOP1 = Only for top player, value over 2nd best player
+        VOP2 = For top 2 players, incremental value of player 2 over player 3
+        VOP3 = For top 3 players, incremental value of player 3 over player 4
+        VOPn = For top n players, incremental value of player n over player n+1
+
+        Parameters
+        ----------
+        projection_column : str, optional
+            Column to use for projections, default is 'median_projection'
+        n : int, optional
+            Maximum gap to calculate, default is 5
+
+        Returns
+        -------
+        DataFrame
+            DataFrame with new VOP columns
+        """
+        if projection_column not in self.df.columns:
+            logger.error(f"Projection column '{projection_column}' not found in dataframe")
+            return self.df
+
+        # Sort by projection column within each position
+        positions = self.df['position'].unique()
+        vop_cols = []
+
+        # Initialize VOP columns in the main dataframe
+        for gap in range(1, n + 1):
+            vop_col = f'vop{gap}'
+            vop_cols.append(vop_col)
+            self.df[vop_col] = 0.0
+
+        # Calculate VOP values for each position
+        for position in positions:
+            # Filter players by position and sort by projection (descending)
+            pos_df = self.df[self.df['position'] == position].sort_values(
+                by=projection_column, ascending=False
+            ).reset_index(drop=True)
+
+            # Get list of player IDs in sorted order
+            sorted_ids = pos_df['id'].tolist()
+
+            # Calculate VOP values for each gap
+            for gap in range(1, n + 1):
+                # Need at least gap+1 players to calculate this VOP
+                if len(pos_df) < gap + 1:
+                    continue
+
+                # Calculate the incremental value at this gap
+                current_projection = pos_df.loc[gap - 1, projection_column]
+                next_projection = pos_df.loc[gap, projection_column]
+                vop_value = max(0, current_projection - next_projection)
+
+                # Assign this VOP value to all players ranked 1 to gap
+                vop_col = f'vop{gap}'
+                for i in range(gap):
+                    if i < len(sorted_ids):
+                        player_id = sorted_ids[i]
+                        self.df.loc[self.df['id'] == player_id, vop_col] = vop_value
+
+        for col in vop_cols:
+            # Round values
+            self.df[col] = self.df[col].round(1)
+
+        return self.df
+
+    def calc_dynamic_value(self) -> DataFrame:
+        """
+        Calculate dynamic value based on the vona columns.
+
+        Parameters
+        ----------
+
+        """
+        # Calculate dynamic_value as the sum of all VONAs normalized to 100
+        self.df['dynamic_value'] = self.df[[col for col in self.df.columns if col.startswith('vop')]].sum(axis=1)
+        self.df['dynamic_value'] = (self.df['dynamic_value'] / self.df['dynamic_value'].max() * 100).round(1)
+
+    def calc_static_value(self) -> None:
         """
         Calculate static value based on the specified value column.
 
@@ -120,6 +203,14 @@ class ProjectionValueCalculator:
         self.df['static_value'] = self.df[[col for col in self.df.columns if col.startswith('value_')]].sum(axis=1)
         self.df['static_value'] = (self.df['static_value'] / self.df['static_value'].max() * 100).round(1)
 
+    def combine_static_and_dynamic_value(self) -> None:
+        """
+        Combine static and dynamic values into a single column.
+        """
+        self.df['dynamic_value'] = np.where(self.df['static_value'] == 0, 0, self.df['dynamic_value'])
+        self.df['draft_value'] = self.df['static_value'] + (self.df['dynamic_value'] / 5)
+        self.df['draft_value'] = (self.df['draft_value'] / self.df['draft_value'].max() * 100).round(1)
+
     def order_columns(self) -> None:
         """
         Reorder the columns in the dataframe for better readability.
@@ -129,8 +220,9 @@ class ProjectionValueCalculator:
         agg_projection_cols = [col for col in self.df.columns if col.endswith('_projection')]
         baseline_cols = [col for col in self.df.columns if col.startswith('baseline_')]
         value_cols = [col for col in self.df.columns if col.startswith('value_')]
+        vona_cols = [col for col in self.df.columns if col.startswith('vop')]
 
-        all_cols = id_cols + ['static_value'] + agg_projection_cols + value_cols + projection_cols + baseline_cols
+        all_cols = id_cols + ['draft_value', 'static_value', 'dynamic_value'] + agg_projection_cols + value_cols + vona_cols + projection_cols + baseline_cols
         self.df = self.df[all_cols]
 
     def get_dataframe(self) -> DataFrame:
@@ -155,25 +247,34 @@ if __name__ == "__main__":
     # Initialize calculator
     calculator = ProjectionValueCalculator(normalized_df, config.PROJECTION_COLUMN_PREFIX)
 
-    for threshold_name in ['elite', 'classic', 'replacement']:
-        # Add value column using median projections
+    # Add traditional static value columns
+    for threshold_name in ['elite', 'last_starter', 'replacement']:
         calculator.add_value_column(
             projection_column='median_projection',
             value_threshold_name=threshold_name,
             value_threshold_dict={
-                'QB': 6 if threshold_name == 'elite' else 10 if threshold_name == 'classic' else 17,
-                'RB': 8 if threshold_name == 'elite' else 24 if threshold_name == 'classic' else 55,
-                'WR': 15 if threshold_name == 'elite' else 36 if threshold_name == 'classic' else 60,
-                'TE': 3 if threshold_name == 'elite' else 10 if threshold_name == 'classic' else 17,
+                'QB': 6 if threshold_name == 'elite' else 10 if threshold_name == 'last_starter' else 17,
+                'RB': 8 if threshold_name == 'elite' else 24 if threshold_name == 'last_starter' else 55,
+                'WR': 15 if threshold_name == 'elite' else 36 if threshold_name == 'last_starter' else 60,
+                'TE': 3 if threshold_name == 'elite' else 10 if threshold_name == 'last_starter' else 17,
             }
         )
 
-    # todo: implement this
-    # for n in range(1,10):
-    #     # Add VONA column
-    #     calculator.add_vona_column(projection_column=f'projection_{n}',value_threshold_name=f'vona_{n}')
+    # Calc static value
+    calculator.calc_static_value()
 
-    # Get the resulting dataframe
-    calculator.calc_static_value(value_col='static_value')
+    # Add VOPn columns
+    calculator.add_vop_columns()
+
+    # Combine dynamic values
+    calculator.calc_dynamic_value()
+
+    # Combine static and dynamic values to get draft_value
+    calculator.combine_static_and_dynamic_value()
+
+    # Order columns for better readability
     calculator.order_columns()
+
+    # Get the final dataframe
     result_df = calculator.get_dataframe().sort_values(by=['static_value'], ascending=False).reset_index(drop=True)
+
