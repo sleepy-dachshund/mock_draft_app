@@ -43,9 +43,9 @@ class ProjectionValueCalculator:
 
     def _calculate_aggregate_projections(self) -> None:
         """Calculate median, high, and low projections across all baseline projections."""
-        self.df['median_projection'] = self.df[self.projection_cols].median(axis=1)
-        self.df['high_projection'] = self.df[self.projection_cols].max(axis=1)
-        self.df['low_projection'] = self.df[self.projection_cols].min(axis=1)
+        self.df['median_projection'] = self.df[self.projection_cols].median(axis=1).round(1)
+        self.df['high_projection'] = self.df[self.projection_cols].max(axis=1).round(1)
+        self.df['low_projection'] = self.df[self.projection_cols].min(axis=1).round(1)
 
         # Sort by median projection
         self.df.sort_values(by='median_projection', ascending=False, inplace=True)
@@ -107,6 +107,32 @@ class ProjectionValueCalculator:
 
         return self.df
 
+    def calc_static_value(self, value_col: str) -> None:
+        """
+        Calculate static value based on the specified value column.
+
+        Parameters
+        ----------
+        value_col : str
+            The name of the value column to use for calculation
+        """
+        # Combine value columns
+        self.df['static_value'] = self.df[[col for col in self.df.columns if col.startswith('value_')]].sum(axis=1)
+        self.df['static_value'] = (self.df['static_value'] / self.df['static_value'].max() * 100).round(1)
+
+    def order_columns(self) -> None:
+        """
+        Reorder the columns in the dataframe for better readability.
+        """
+        id_cols = ['id', 'player', 'team', 'position']
+        projection_cols = [col for col in self.df.columns if col.startswith(self.projection_column_prefix)]
+        agg_projection_cols = [col for col in self.df.columns if col.endswith('_projection')]
+        baseline_cols = [col for col in self.df.columns if col.startswith('baseline_')]
+        value_cols = [col for col in self.df.columns if col.startswith('value_')]
+
+        all_cols = id_cols + ['static_value'] + agg_projection_cols + value_cols + projection_cols + baseline_cols
+        self.df = self.df[all_cols]
+
     def get_dataframe(self) -> DataFrame:
         """
         Return the current state of the dataframe with all calculated values.
@@ -116,18 +142,6 @@ class ProjectionValueCalculator:
         DataFrame
             The processed dataframe
         """
-
-        # Combine value columns
-        self.df['static_value'] = self.df[[col for col in self.df.columns if col.startswith('value_')]].sum(axis=1)
-        self.df['static_value'] = (self.df['static_value'] / self.df['static_value'].max() * 100).round(1)
-
-        id_cols = ['id', 'player', 'team', 'position']
-        projection_cols = [col for col in self.df.columns if col.startswith(self.projection_column_prefix)]
-        agg_projection_cols = [col for col in self.df.columns if col.endswith('_projection')]
-        baseline_cols = [col for col in self.df.columns if col.startswith('baseline_')]
-        value_cols = [col for col in self.df.columns if col.startswith('value_')]
-        all_cols = id_cols + ['static_value'] + agg_projection_cols + value_cols + projection_cols + baseline_cols
-        self.df = self.df[all_cols]
         return self.df
 
 
@@ -141,41 +155,25 @@ if __name__ == "__main__":
     # Initialize calculator
     calculator = ProjectionValueCalculator(normalized_df, config.PROJECTION_COLUMN_PREFIX)
 
-    # Add elite value column using median projections
-    calculator.add_value_column(
-        projection_column='median_projection',
-        value_threshold_name='elite',
-        value_threshold_dict={
-            'QB': 6,
-            'RB': 8,
-            'WR': 15,
-            'TE': 3,
-        }
-    )
+    for threshold_name in ['elite', 'classic', 'replacement']:
+        # Add value column using median projections
+        calculator.add_value_column(
+            projection_column='median_projection',
+            value_threshold_name=threshold_name,
+            value_threshold_dict={
+                'QB': 6 if threshold_name == 'elite' else 10 if threshold_name == 'classic' else 17,
+                'RB': 8 if threshold_name == 'elite' else 24 if threshold_name == 'classic' else 55,
+                'WR': 15 if threshold_name == 'elite' else 36 if threshold_name == 'classic' else 60,
+                'TE': 3 if threshold_name == 'elite' else 10 if threshold_name == 'classic' else 17,
+            }
+        )
 
-    # Add classic value column using median projections
-    calculator.add_value_column(
-        projection_column='median_projection',
-        value_threshold_name='classic',
-        value_threshold_dict={
-            'QB': 10,
-            'RB': 24,
-            'WR': 36,
-            'TE': 10,
-        }
-    )
-
-    # Add another value column using high projections
-    calculator.add_value_column(
-        projection_column='median_projection',
-        value_threshold_name='replacement',
-        value_threshold_dict={
-            'QB': 17,
-            'RB': 55,
-            'WR': 60,
-            'TE': 17,
-        }
-    )
+    # todo: implement this
+    # for n in range(1,10):
+    #     # Add VONA column
+    #     calculator.add_vona_column(projection_column=f'projection_{n}',value_threshold_name=f'vona_{n}')
 
     # Get the resulting dataframe
+    calculator.calc_static_value(value_col='static_value')
+    calculator.order_columns()
     result_df = calculator.get_dataframe().sort_values(by=['static_value'], ascending=False).reset_index(drop=True)
