@@ -166,6 +166,11 @@ class DataMerger:
         # Drop unnecessary columns
         merged_df = self._clean_merged_df_columns(merged_df)
 
+        # Round projection columns to 1 decimal place
+        for col in merged_df.columns:
+            if col.startswith(self.config.PROJECTION_COLUMN_PREFIX):
+                merged_df[col] = merged_df[col].round(1)
+
         # Generate Flag DF
         flag_df = merged_df.iloc[:200].copy()
         flag_df['flag'] = np.where(flag_df.isna().any(axis=1), True, False)
