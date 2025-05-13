@@ -47,6 +47,9 @@ class ProjectionValueCalculator:
         self.df['high_projection'] = self.df[self.projection_cols].max(axis=1).round(1)
         self.df['low_projection'] = self.df[self.projection_cols].min(axis=1).round(1)
 
+        # Create available_PPR for dynamic_value and draft_value
+        self.df['available_pts'] = np.where(self.df['drafted'] >= 1, 0, self.df['median_projection'])
+
         # Sort by median projection
         self.df.sort_values(by='median_projection', ascending=False, inplace=True)
         self.df.reset_index(drop=True, inplace=True)
@@ -108,7 +111,7 @@ class ProjectionValueCalculator:
         return self.df
 
     def add_vop_columns(self,
-                        projection_column: str = 'median_projection',
+                        projection_column: str = 'available_pts',  # note available_pts is used for live draft_value calcs
                         n: int = 5) -> DataFrame:
         """
         Add VOP (Value Over Player) columns from 1 to N.
@@ -146,7 +149,7 @@ class ProjectionValueCalculator:
 
         # Calculate VOP values for each position
         for position in positions:
-            # Filter players by position and sort by projection (descending)
+            # Filter players by position and sort by (available) projection (descending)
             pos_df = self.df[self.df['position'] == position].sort_values(
                 by=projection_column, ascending=False
             ).reset_index(drop=True)
@@ -219,15 +222,27 @@ class ProjectionValueCalculator:
         self.df['rank_pos_team'] = self.df.groupby(['team', 'position'])['median_projection'].rank(ascending=False, method='min')
         self.df['mkt_share'] = (self.df['median_projection'] / self.df.groupby(['team', 'position'])['median_projection'].transform('sum') * 100).round(1)
 
-    def combine_static_and_dynamic_value(self, draft_mode: bool = True) -> None:
+    def combine_static_and_dynamic_value(self, draft_mode: bool = True, dynamic_multiplier: float = 0.2) -> None:
         """
         Combine static and dynamic values into a single column.
         """
         if draft_mode:
+
+            # No dynamic value for players with no static value
             self.df['dynamic_value'] = np.where(self.df['static_value'] == 0, 0, self.df['dynamic_value'])
-            self.df['draft_value'] = np.where(self.df['dynamic_value'] > self.df['static_value'], (self.df['static_value'] + self.df['dynamic_value'] / 10), self.df['static_value'])
+
+            # If draft value is greater than dynamic value, this is a flag, and we want to reflect that in draft_value
+            self.df['draft_value'] = np.where(self.df['dynamic_value'] > self.df['static_value'], (self.df['static_value'] + self.df['dynamic_value'] * dynamic_multiplier), self.df['static_value'])
+
+            # if drafting, only available players have value
+            self.df['draft_value'] = np.where(self.df['drafted'] >= 1, 0, self.df['draft_value'])
+
         else:
+
+            # If not in draft_mode, just use the static value (create a standard cheat sheet
             self.df['draft_value'] = self.df['static_value']
+
+        # Lastly, normalize draft_value
         self.df['draft_value'] = (self.df['draft_value'] / self.df['draft_value'].max() * 100).round(1)
 
     def order_columns(self) -> None:
@@ -242,7 +257,14 @@ class ProjectionValueCalculator:
         vop_cols = [col for col in self.df.columns if col.startswith('vop')]
         rank_cols = ['rank', 'rank_pos', 'rank_pos_team', 'mkt_share']
 
-        all_cols = id_cols + rank_cols + ['draft_value', 'static_value', 'dynamic_value'] + agg_projection_cols + value_cols + vop_cols + projection_cols + baseline_cols
+        all_cols = (id_cols +
+                    ['draft_value', 'static_value', 'dynamic_value'] +
+                    ['drafted', 'available_pts'] +
+                    rank_cols +
+                    agg_projection_cols +
+                    value_cols + vop_cols +
+                    projection_cols)
+
         self.df = self.df[all_cols]
 
     def get_dataframe(self) -> DataFrame:
@@ -270,6 +292,8 @@ def value_players(df: DataFrame,
         DataFrame containing player projection data
     projection_column_prefix : str, optional
         Prefix used to identify projection columns, by default 'projection_'
+    vopn : int, optional
+        Number of VOP columns to calculate, by default 5
     draft_mode : bool, optional
         Whether to adjust for scarcity during draft, by default True
 
@@ -300,19 +324,39 @@ def value_players(df: DataFrame,
 
     calculator.calc_static_value()  # Calculate static value
     calculator.add_rank_cols()  # Calculate Position Rank, Market Share
-    calculator.add_vop_columns(n=vopn)  # Add VOPn columns
+    calculator.add_vop_columns(n=vopn, projection_column='available_pts')  # Add VOPn columns
     calculator.calc_dynamic_value()  # Calculate dynamic value
     calculator.combine_static_and_dynamic_value(draft_mode=draft_mode)  # Combine static and dynamic values to get draft_value
     calculator.order_columns()  # Order columns for better readability
 
-    return calculator.get_dataframe().sort_values(by=['draft_value'], ascending=False).reset_index(drop=True)
+    return calculator.get_dataframe().sort_values(by=['draft_value', 'static_value', 'median_projection'], ascending=False).reset_index(drop=True)
 
 if __name__ == "__main__":
     import config
     from run_data_gen import data_gen
 
     # Generate data
-    normalized_df, _, _, _ = data_gen(trim_output=True, save_output=False)
+    raw_df, _, _, _ = data_gen(trim_output=True, save_output=False)
+
+    '''
+    # see below raw_df is just player information and then PPR projections from various sources.
+    
+    print(raw_df.columns)
+    Index(['id', 'player', 'team', 'position', 'projection_FPoints',
+           'projection_FTN', 'projection_Sharks', 'projection_SharksC',
+           'projection_Raybon', 'projection_Koerner'],
+          dtype='object')
+    '''
+
+    raw_df['drafted'] = 0
+
+    input_df = raw_df.copy()
+
+    # Test: set some players to drafted and recalc
+    drafted_players = []
+
+    for player in drafted_players:
+        input_df.loc[input_df['player'] == player, 'drafted'] = 1
 
     # Calculate player values
-    result_df = value_players(normalized_df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX, vopn=5, draft_mode=True)
+    result_df = value_players(input_df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX, vopn=5, draft_mode=True)
