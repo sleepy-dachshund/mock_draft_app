@@ -307,7 +307,7 @@ if __name__ == "__main__":
     from run_data_gen import data_gen
 
     # Generate data
-    normalized_df, _, _, _ = data_gen(save_output=False)
+    normalized_df, _, _, _ = data_gen(trim_output=True, save_output=False)
 
     # Calculate player values
     result_df = value_players(normalized_df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX, vopn=5, draft_mode=True)

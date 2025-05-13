@@ -15,7 +15,7 @@ from data_normalizer import DataNormalizer
 # Set up logging
 logger = logging.getLogger(__name__)
 
-def data_gen(save_output: bool = True) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
+def data_gen(trim_output: bool = True, save_output: bool = True) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
 
     # load data
     loader = DataLoader(
@@ -41,6 +41,15 @@ def data_gen(save_output: bool = True) -> Tuple[DataFrame, DataFrame, DataFrame,
     normalized_df = normalizer.normalize_projection_data()
     normalization_factors_df = normalizer.get_normalization_factors()
 
+    if trim_output:
+        projection_cols = [col for col in normalized_df.columns if col.startswith(config.PROJECTION_COLUMN_PREFIX)]
+        normalized_df['median_projection'] = normalized_df[projection_cols].median(axis=1).round(1)
+        normalized_df['rank_pos'] = normalized_df.groupby('position')['median_projection'].rank(ascending=False, method='min')
+        players_to_keep = {'QB': 25, 'RB': 75, 'WR': 75, 'TE': 25}
+        normalized_df['keep'] = normalized_df['position'].map(players_to_keep)
+        normalized_df = normalized_df[normalized_df['keep'] >= normalized_df['rank_pos']]
+        normalized_df.drop(columns=['median_projection', 'rank_pos', 'keep'], inplace=True)
+
     if save_output:
         # save data
         today = pd.Timestamp.today().strftime("%Y%m%d")
@@ -53,4 +62,4 @@ def data_gen(save_output: bool = True) -> Tuple[DataFrame, DataFrame, DataFrame,
     return normalized_df, normalization_factors_df, merged_df, flag_df
 
 if __name__ == "__main__":
-    normalized_df, normalization_factors_df, merged_df, flag_df = data_gen(save_output=True)
+    normalized_df, normalization_factors_df, merged_df, flag_df = data_gen(trim_output=True, save_output=True)
