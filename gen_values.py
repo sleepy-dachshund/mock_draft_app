@@ -203,12 +203,31 @@ class ProjectionValueCalculator:
         self.df['static_value'] = self.df[[col for col in self.df.columns if col.startswith('value_')]].sum(axis=1)
         self.df['static_value'] = (self.df['static_value'] / self.df['static_value'].max() * 100).round(1)
 
-    def combine_static_and_dynamic_value(self) -> None:
+    def add_rank_cols(self) -> None:
+        """
+        Add rank & market share columns for each player
+
+        Parameters
+        ----------
+
+
+        """
+        self.df = self.df.sort_values(by=['static_value'], ascending=False).reset_index(drop=True)
+
+        self.df['rank'] = self.df.static_value.rank(ascending=False, method='min')
+        self.df['rank_pos'] = self.df.groupby('position')['median_projection'].rank(ascending=False, method='min')
+        self.df['rank_pos_team'] = self.df.groupby(['team', 'position'])['median_projection'].rank(ascending=False, method='min')
+        self.df['mkt_share'] = (self.df['median_projection'] / self.df.groupby(['team', 'position'])['median_projection'].transform('sum') * 100).round(1)
+
+    def combine_static_and_dynamic_value(self, draft_mode: bool = True) -> None:
         """
         Combine static and dynamic values into a single column.
         """
-        self.df['dynamic_value'] = np.where(self.df['static_value'] == 0, 0, self.df['dynamic_value'])
-        self.df['draft_value'] = self.df['static_value'] + (self.df['dynamic_value'] / 5)
+        if draft_mode:
+            self.df['dynamic_value'] = np.where(self.df['static_value'] == 0, 0, self.df['dynamic_value'])
+            self.df['draft_value'] = np.where(self.df['dynamic_value'] > self.df['static_value'], (self.df['static_value'] + self.df['dynamic_value'] / 10), self.df['static_value'])
+        else:
+            self.df['draft_value'] = self.df['static_value']
         self.df['draft_value'] = (self.df['draft_value'] / self.df['draft_value'].max() * 100).round(1)
 
     def order_columns(self) -> None:
@@ -220,9 +239,10 @@ class ProjectionValueCalculator:
         agg_projection_cols = [col for col in self.df.columns if col.endswith('_projection')]
         baseline_cols = [col for col in self.df.columns if col.startswith('baseline_')]
         value_cols = [col for col in self.df.columns if col.startswith('value_')]
-        vona_cols = [col for col in self.df.columns if col.startswith('vop')]
+        vop_cols = [col for col in self.df.columns if col.startswith('vop')]
+        rank_cols = ['rank', 'rank_pos', 'rank_pos_team', 'mkt_share']
 
-        all_cols = id_cols + ['draft_value', 'static_value', 'dynamic_value'] + agg_projection_cols + value_cols + vona_cols + projection_cols + baseline_cols
+        all_cols = id_cols + rank_cols + ['draft_value', 'static_value', 'dynamic_value'] + agg_projection_cols + value_cols + vop_cols + projection_cols + baseline_cols
         self.df = self.df[all_cols]
 
     def get_dataframe(self) -> DataFrame:
@@ -237,15 +257,28 @@ class ProjectionValueCalculator:
         return self.df
 
 
-if __name__ == "__main__":
-    import config
-    from run_data_gen import data_gen
+def value_players(df: DataFrame,
+                  projection_column_prefix: str = 'projection_',
+                  vopn: int = 5,
+                  draft_mode: bool = True) -> DataFrame:
+    """
+    Calculate player values based on projections and thresholds.
 
-    # Generate data
-    normalized_df, _, _, _ = data_gen(save_output=False)
+    Parameters
+    ----------
+    df : DataFrame
+        DataFrame containing player projection data
+    projection_column_prefix : str, optional
+        Prefix used to identify projection columns, by default 'projection_'
+    draft_mode : bool, optional
+        Whether to adjust for scarcity during draft, by default True
 
-    # Initialize calculator
-    calculator = ProjectionValueCalculator(normalized_df, config.PROJECTION_COLUMN_PREFIX)
+    Returns
+    -------
+    DataFrame
+        DataFrame with calculated values
+    """
+    calculator = ProjectionValueCalculator(df, projection_column_prefix)  # Initialize calculator
 
     # Add traditional static value columns
     for threshold_name in ['elite', 'last_starter', 'replacement']:
@@ -260,21 +293,21 @@ if __name__ == "__main__":
             }
         )
 
-    # Calc static value
-    calculator.calc_static_value()
+    calculator.calc_static_value()  # Calculate static value
+    calculator.add_rank_cols()  # Calculate Position Rank, Market Share
+    calculator.add_vop_columns(n=vopn)  # Add VOPn columns
+    calculator.calc_dynamic_value()  # Calculate dynamic value
+    calculator.combine_static_and_dynamic_value(draft_mode=draft_mode)  # Combine static and dynamic values to get draft_value
+    calculator.order_columns()  # Order columns for better readability
 
-    # Add VOPn columns
-    calculator.add_vop_columns()
+    return calculator.get_dataframe().sort_values(by=['draft_value'], ascending=False).reset_index(drop=True)
 
-    # Combine dynamic values
-    calculator.calc_dynamic_value()
+if __name__ == "__main__":
+    import config
+    from run_data_gen import data_gen
 
-    # Combine static and dynamic values to get draft_value
-    calculator.combine_static_and_dynamic_value()
+    # Generate data
+    normalized_df, _, _, _ = data_gen(save_output=False)
 
-    # Order columns for better readability
-    calculator.order_columns()
-
-    # Get the final dataframe
-    result_df = calculator.get_dataframe().sort_values(by=['static_value'], ascending=False).reset_index(drop=True)
-
+    # Calculate player values
+    result_df = value_players(normalized_df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX, vopn=5, draft_mode=True)
