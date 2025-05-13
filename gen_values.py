@@ -257,13 +257,14 @@ class ProjectionValueCalculator:
         vop_cols = [col for col in self.df.columns if col.startswith('vop')]
         rank_cols = ['rank', 'rank_pos', 'rank_pos_team', 'mkt_share']
 
-        all_cols = (id_cols +
-                    ['draft_value', 'static_value', 'dynamic_value'] +
-                    ['drafted', 'available_pts'] +
-                    rank_cols +
-                    agg_projection_cols +
-                    value_cols + vop_cols +
-                    projection_cols)
+        all_cols = (id_cols
+                    + ['draft_value', 'static_value', 'dynamic_value']
+                    + ['drafted', 'available_pts']
+                    + rank_cols
+                    + agg_projection_cols
+                    + value_cols
+                    # + vop_cols + projection_cols
+                    )
 
         self.df = self.df[all_cols]
 
@@ -278,6 +279,17 @@ class ProjectionValueCalculator:
         """
         return self.df
 
+def get_raw_df():
+    import config
+    from run_data_gen import data_gen
+    raw_df, _, _, _ = data_gen(trim_output=True, save_output=False)
+    raw_df['drafted'] = 0
+
+    cols = ['id', 'player', 'team', 'position', 'drafted']
+    proj_cols = [col for col in raw_df.columns if col.startswith(config.PROJECTION_COLUMN_PREFIX)]
+    cols.extend(proj_cols)
+
+    return raw_df[cols]
 
 def value_players(df: DataFrame,
                   projection_column_prefix: str = 'projection_',
@@ -302,6 +314,7 @@ def value_players(df: DataFrame,
     DataFrame
         DataFrame with calculated values
     """
+    import config
     calculator = ProjectionValueCalculator(df, projection_column_prefix)  # Initialize calculator
 
     ls_qb = config.ROSTER_N_QB * config.N_TEAMS
@@ -336,27 +349,8 @@ if __name__ == "__main__":
     from run_data_gen import data_gen
 
     # Generate data
-    raw_df, _, _, _ = data_gen(trim_output=True, save_output=False)
-
-    '''
-    # see below raw_df is just player information and then PPR projections from various sources.
-    
-    print(raw_df.columns)
-    Index(['id', 'player', 'team', 'position', 'projection_FPoints',
-           'projection_FTN', 'projection_Sharks', 'projection_SharksC',
-           'projection_Raybon', 'projection_Koerner'],
-          dtype='object')
-    '''
-
-    raw_df['drafted'] = 0
-
+    raw_df = get_raw_df()
     input_df = raw_df.copy()
-
-    # Test: set some players to drafted and recalc
-    drafted_players = []
-
-    for player in drafted_players:
-        input_df.loc[input_df['player'] == player, 'drafted'] = 1
 
     # Calculate player values
     result_df = value_players(input_df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX, vopn=5, draft_mode=True)
