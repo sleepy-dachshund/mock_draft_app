@@ -280,16 +280,21 @@ def value_players(df: DataFrame,
     """
     calculator = ProjectionValueCalculator(df, projection_column_prefix)  # Initialize calculator
 
+    ls_qb = config.ROSTER_N_QB * config.N_TEAMS
+    ls_rb = int(config.ROSTER_N_RB * config.N_TEAMS + (config.ROSTER_N_FLEX * config.N_TEAMS * 1/5))
+    ls_wr = int(config.ROSTER_N_WR * config.N_TEAMS + (config.ROSTER_N_FLEX * config.N_TEAMS * 4/5))
+    ls_te = config.ROSTER_N_TE * config.N_TEAMS
+
     # Add traditional static value columns
     for threshold_name in ['elite', 'last_starter', 'replacement']:
         calculator.add_value_column(
             projection_column='median_projection',
             value_threshold_name=threshold_name,
             value_threshold_dict={
-                'QB': 6 if threshold_name == 'elite' else 10 if threshold_name == 'last_starter' else 17,
-                'RB': 8 if threshold_name == 'elite' else 24 if threshold_name == 'last_starter' else 55,
-                'WR': 15 if threshold_name == 'elite' else 36 if threshold_name == 'last_starter' else 60,
-                'TE': 3 if threshold_name == 'elite' else 10 if threshold_name == 'last_starter' else 17,
+                'QB': 6 if threshold_name == 'elite' else ls_qb if threshold_name == 'last_starter' else 17,
+                'RB': 8 if threshold_name == 'elite' else ls_rb if threshold_name == 'last_starter' else 55,
+                'WR': 15 if threshold_name == 'elite' else ls_wr if threshold_name == 'last_starter' else 60,
+                'TE': 3 if threshold_name == 'elite' else ls_te if threshold_name == 'last_starter' else 17,
             }
         )
 
