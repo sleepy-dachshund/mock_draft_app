@@ -45,7 +45,17 @@ def data_gen(trim_output: bool = True, save_output: bool = True) -> Tuple[DataFr
         projection_cols = [col for col in normalized_df.columns if col.startswith(config.PROJECTION_COLUMN_PREFIX)]
         normalized_df['median_projection'] = normalized_df[projection_cols].median(axis=1).round(1)
         normalized_df['rank_pos'] = normalized_df.groupby('position')['median_projection'].rank(ascending=False, method='min')
-        players_to_keep = {'QB': 25, 'RB': 75, 'WR': 75, 'TE': 25}
+
+        ls_qb = config.ROSTER_N_QB * config.N_TEAMS
+        ls_rb = int(config.ROSTER_N_RB * config.N_TEAMS + (config.ROSTER_N_FLEX * config.N_TEAMS * 1 / 5))
+        ls_wr = int(config.ROSTER_N_WR * config.N_TEAMS + (config.ROSTER_N_FLEX * config.N_TEAMS * 4 / 5))
+        ls_te = config.ROSTER_N_TE * config.N_TEAMS
+
+        players_to_keep = {'QB': ls_qb * 2.5,
+                           'RB': ls_rb * 3,
+                           'WR': ls_wr * 3,
+                           'TE': ls_te * 2.5}
+
         normalized_df['keep'] = normalized_df['position'].map(players_to_keep)
         normalized_df = normalized_df[normalized_df['keep'] >= normalized_df['rank_pos']]
         normalized_df.drop(columns=['median_projection', 'rank_pos', 'keep'], inplace=True)
