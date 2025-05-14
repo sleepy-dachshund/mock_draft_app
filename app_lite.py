@@ -1,4 +1,4 @@
-# app.py
+# app_lite.py
 import streamlit as st
 import pandas as pd
 import config
