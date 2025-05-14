@@ -17,7 +17,13 @@ edited_df = st.data_editor(
     num_rows="dynamic",
     use_container_width=True,
     column_config={
-        "drafted": st.column_config.CheckboxColumn("🚫 Drafted")
+        "drafted": st.column_config.NumberColumn(
+            "Draft Pick Number",  # Label for the column header
+            min_value=0,  # set a minimum allowed integer value
+            # max_value=250, # set a maximum allowed integer value
+            step=1,  # set the step for the input (e.g., 1 for integers)
+            format="%d"  # format the display as an integer
+        )
     },
     key="draft_table"
 )
@@ -29,7 +35,7 @@ recalc = st.button("Re-compute rankings ↻", type="primary")
 @st.cache_data(show_spinner="Calculating values…")
 def run_model(df: pd.DataFrame) -> pd.DataFrame:
     return value_players(df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX,
-                         vopn=5, draft_mode=True)
+                         vopn=5, draft_mode=True).drop(columns=["id"]).set_index("player")
 
 if recalc or st.session_state.get("first_run", True):
     result_df = run_model(edited_df)
@@ -43,15 +49,14 @@ left, right = st.columns([4, 1])
 with left:
     st.subheader("📈 Live rankings")
     st.dataframe(
-        result_df.style.background_gradient(
-            subset=["draft_value"], cmap="Greens"
-        ),
+        result_df.style.background_gradient(subset=["draft_value", "static_value", "dynamic_value"], cmap="RdYlGn"),
         use_container_width=True
     )
 with right:
-    top5 = result_df.head(5)[["player", "draft_value", "position"]]
-    st.subheader("📝 Next-ups")
-    st.table(top5)
+    # create small selection showing top 3 at each position
+    top3 = result_df.groupby("position").head(3)[["position", "draft_value", "rank", "rank_pos"]]
+    st.subheader("Pos. Top 3 Remaining")
+    st.table(top3)
 
 # reset button
 if st.button("Reset draft"):
