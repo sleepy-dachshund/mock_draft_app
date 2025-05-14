@@ -16,3 +16,4 @@ data/input/2025/historical/historical_2024.csv
 data/input/2025/historical/2024_actuals.csv
 /logs
 /data
+/__pycache__
