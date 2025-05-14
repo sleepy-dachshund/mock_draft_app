@@ -61,21 +61,27 @@ with left:
     # map back by player name
     st.session_state["base_df"]["drafted"] = (st.session_state["base_df"]["player"].map(draft_updates).fillna(0).astype(int))
 
-# optional manual trigger
-recalc = st.button("Re-compute rankings ↻", type="primary")
-
 # ---------- 3️⃣  heavy calc (cached) ----------
 @st.cache_data(show_spinner="Calculating values…")
 def run_model(df: pd.DataFrame) -> pd.DataFrame:
-    return value_players(df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX,
-                         vopn=5, draft_mode=True).drop(columns=["id"]).set_index("player")
+    return (
+        value_players(
+            df,
+            projection_column_prefix=config.PROJECTION_COLUMN_PREFIX,
+            vopn=5,
+            draft_mode=True,
+        )
+        .drop(columns=["id"])
+        .set_index("player")
+    )
 
-if recalc or st.session_state.get("first_run", True):
+# ⏩ Auto-recompute every rerun (cheap if df hash unchanged)
+result_df = run_model(st.session_state["base_df"])
+
+# 🔄 Manual fallback: clear cache & re-run
+if st.button("Re-compute rankings ↻", type="primary"):
+    run_model.clear()                # toss cached result
     result_df = run_model(st.session_state["base_df"])
-    st.session_state["result_df"] = result_df
-    st.session_state["first_run"] = False
-else:
-    result_df = st.session_state["result_df"]
 
 # ---------- draft board styler ----------
 def round_numeric(df: pd.DataFrame) -> pd.DataFrame:
