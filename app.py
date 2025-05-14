@@ -2,10 +2,10 @@
 import streamlit as st
 import pandas as pd
 import config
-from gen_values import get_raw_df, value_players   # adjust module names
+from gen_values import get_raw_df, value_players
 
 # --- constants you can tweak ---------------------------------
-VISIBLE_EDIT_COLS = ["player", "team", "position", "drafted"]      # thin view
+VISIBLE_EDIT_COLS = ["team", "position", "drafted"]
 INT_COLS          = {"drafted", "rank", "rank_pos", "rank_pos_team"}
 ADD_KEEPERS = True
 KEEPERS = {'breece hall': 21,
@@ -38,20 +38,28 @@ if "base_df" not in st.session_state:
 left, middle, right = st.columns([3, 6, 2])
 
 # ---------- draft board: interactive editor ----------
+edit_view = (
+    st.session_state["base_df"]
+    .set_index("player")                # <-- row labels become names, saves a column
+    [VISIBLE_EDIT_COLS]                 # keep only the slim set
+)
+
 with left:
     st.subheader("Draft Board")
-    edit_view = st.session_state["base_df"][VISIBLE_EDIT_COLS]
     edited_view = st.data_editor(
         edit_view,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "drafted": st.column_config.NumberColumn("Drafted", min_value=0, step=1, format="%d")
+            "drafted": st.column_config.NumberColumn("drafted", min_value=0, step=1, format="%d")
         },
         key="draft_table"
     )
-    # propagate edited 'drafted' flags into the full DF
-    st.session_state["base_df"]["drafted"] = edited_view["drafted"]
+    # pull the drafted column out as a Series
+    draft_updates = edited_view["drafted"]
+
+    # map back by player name
+    st.session_state["base_df"]["drafted"] = (st.session_state["base_df"]["player"].map(draft_updates).fillna(0).astype(int))
 
 # optional manual trigger
 recalc = st.button("Re-compute rankings ↻", type="primary")
