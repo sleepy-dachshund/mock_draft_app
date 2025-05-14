@@ -282,14 +282,49 @@ class ProjectionValueCalculator:
 def get_raw_df():
     import config
     from run_data_gen import data_gen
-    raw_df, _, _, _ = data_gen(trim_output=True, save_output=False)
+    raw_df, _, _, _ = data_gen(trim_output=True, save_output=True)
     raw_df['drafted'] = 0
 
-    cols = ['id', 'player', 'team', 'position', 'drafted']
+    output_cols = ['id', 'player', 'team', 'position', 'drafted']
     proj_cols = [col for col in raw_df.columns if col.startswith(config.PROJECTION_COLUMN_PREFIX)]
-    cols.extend(proj_cols)
+    output_cols.extend(proj_cols)
 
-    return raw_df[cols]
+    raw_df = raw_df[output_cols].copy()
+
+    # quick sort by VORP here.
+    raw_df['median_projection'] = raw_df[proj_cols].median(axis=1)
+    projection_column = 'median_projection'
+    value_threshold_name = 'vorp'
+    value_threshold_dict = {'QB': 20, 'RB': 32, 'WR': 48, 'TE': 20}
+
+    # Initialize baseline dictionary
+    value_baseline_dict = {pos: 0 for pos in value_threshold_dict.keys()}
+
+    # Calculate baseline projections for each position
+    for position, threshold in value_threshold_dict.items():
+        position_df = raw_df[raw_df['position'] == position].copy()
+
+        if len(position_df) < threshold:
+            continue
+
+        # Find threshold player
+        baseline_row = position_df.iloc[threshold - 1]
+        baseline_projection = baseline_row[projection_column]
+
+        # Update baseline dictionary
+        value_baseline_dict[position] = baseline_projection
+
+    # Add baseline and value columns
+    baseline_col = f'baseline_{value_threshold_name}'
+    value_col = f'value_{value_threshold_name}'
+
+    raw_df[baseline_col] = raw_df['position'].map(value_baseline_dict)
+    raw_df[value_col] = (raw_df[projection_column] - raw_df[baseline_col]).clip(lower=0).round(1)
+
+    raw_df.sort_values(by=value_col, ascending=False, inplace=True)
+    raw_df.reset_index(drop=True, inplace=True)
+
+    return raw_df[output_cols]
 
 def value_players(df: DataFrame,
                   projection_column_prefix: str = 'projection_',
