@@ -234,11 +234,6 @@ def render_rankings():
     # Run model or use cached results
     result_df = run_model(st.session_state["base_df"])
 
-    # Add button to manually clear cache and recalculate
-    if st.button("Re-compute rankings ↻", type="primary"):
-        run_model.clear()
-        result_df = run_model(st.session_state["base_df"])
-
     # Create styler and display rankings
     styler = create_rankings_styler(result_df)
     st.dataframe(styler, use_container_width=True, height=750)
@@ -274,6 +269,22 @@ def render_position_top_picks():
         use_container_width=True,
         height=500,
     )
+
+
+def re_calc_rankings():
+    """
+    Recalculate the rankings based on the current draft state.
+
+    This function clears the cache and runs the valuation model
+    to update the rankings.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with updated player values and rankings
+    """
+    run_model.clear()
+    return run_model(st.session_state["base_df"])
 
 
 def reset_draft():

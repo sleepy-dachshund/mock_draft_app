@@ -5,6 +5,7 @@ from utils_app import (
     render_draft_board,
     render_rankings,
     render_position_top_picks,
+    re_calc_rankings,
     reset_draft
 )
 
@@ -32,6 +33,10 @@ with middle:
 with right:
     st.subheader("Pos. Top 3 Remaining")
     render_position_top_picks()
+
+# Add button to manually clear cache and recalculate
+if st.button("Re-compute rankings ↻", type="primary"):
+    re_calc_rankings()
 
 # Add reset button at the bottom
 if st.button("Reset draft"):
