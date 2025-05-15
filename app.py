@@ -2,38 +2,9 @@
 import streamlit as st
 import pandas as pd
 import config
+from utils_app import *
 from gen_values import get_raw_df, value_players
 
-# --- constants you can tweak ---------------------------------
-VISIBLE_EDIT_COLS = ["team", "position", "drafted"]
-INT_COLS          = {"drafted", "rank", "rank_pos", "rank_pos_team"}
-def round_numeric(df: pd.DataFrame) -> pd.DataFrame:
-    df2 = df.copy()
-    num_cols = df2.select_dtypes("number").columns.difference(INT_COLS)
-    # df2[num_cols] = df2[num_cols].round(1)
-    df2[num_cols] = df2[num_cols].astype(int) # todo: place holder, working on this, should be one decimal
-    df2[list(INT_COLS)] = df2[list(INT_COLS)].astype(int)
-    return df2
-POS_COLORS = {
-    "QB": "#d0e7ff",   # light blue
-    "RB": "#d7f9d7",   # light green
-    "WR": "#eadcff",   # light purple
-    "TE": "#ffe9d6",   # light orange
-}
-def position_tint(row):
-    color = POS_COLORS.get(row["position"], "")
-    return [f"background-color: {color}" for _ in row]
-ADD_KEEPERS = True
-KEEPERS = {'breece hall': 21,
-           'terry mclaurin': 50,
-           'jayden daniels': 74,
-           'ladd mcconkey': 77,
-           'jaxon smith-njigba': 78,
-           'chuba hubbard': 99,
-           "de'von achane": 105,
-           'puka nacua': 132,
-           'kyren williams': 133,
-           'rashid shaheed': 135}
 # --------------------------------------------------------------
 
 st.set_page_config(page_title="Draft Assistant", layout="wide")
@@ -54,16 +25,18 @@ if "base_df" not in st.session_state:
 left, middle, right = st.columns([3, 6, 2])
 
 # ---------- draft board: interactive editor ----------
-edit_view = (
-    st.session_state["base_df"]
-    .set_index("player")                # <-- row labels become names, saves a column
-    [VISIBLE_EDIT_COLS]                 # keep only the slim set
-)
+# Initialize edit_view once and store in session state
+if "edit_view" not in st.session_state:
+    st.session_state["edit_view"] = (
+        st.session_state["base_df"]
+        .set_index("player")
+        [VISIBLE_EDIT_COLS]
+    )
 
 with left:
     st.subheader("Draft Board")
     edited_view = st.data_editor(
-        edit_view,
+        st.session_state["edit_view"],  # Use the persistent version
         num_rows="dynamic",
         use_container_width=True,
         column_config={
@@ -76,6 +49,7 @@ with left:
 
     # map back by player name
     st.session_state["base_df"]["drafted"] = (st.session_state["base_df"]["player"].map(draft_updates).fillna(0).astype(int))
+
 
 # ---------- 3️⃣  heavy calc (cached) ----------
 @st.cache_data(show_spinner="Calculating values…")
@@ -140,4 +114,4 @@ with right:
 # reset button
 if st.button("Reset draft"):
     st.session_state.clear()
-    # st.experimental_rerun()
+    st.rerun()
