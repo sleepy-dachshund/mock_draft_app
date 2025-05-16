@@ -94,6 +94,19 @@ DEFAULT_LEAGUE_SETTINGS = {
 }
 
 # ===============================
+# DRAFT TIPS
+# ===============================
+draft_tips = {
+    1: "Best Available Player (Ja'marr, Saquon, Bijan, JJ, CeeDee, etc.)",
+    2: "Make sure you have 1 top RB and 1 top WR by now. If so, can consider Elite TE (Bowers or McBride) or grab a first round value that fell.",
+    3: "If you have RB, WR, and TE, go RB or WR. If missed on TE, can go Elite QB (Lamar, Jayden, Josh, Hurts, Burrow)",
+    4: "If missed elite QBs, go RB or WR to fill roster space",
+    5: "There might be an elite QB left, otherwise go for RB or WR",
+    6: "Keep filling depth at RB & WR, look for high value, high market share, high rank_pos_team players",
+    7: "TE options here if needed (LaPorta, Kelce) or QB (Mahomes, Baker, etc.) otherwise keep going for RB1s and WR1s by market share",
+}
+
+# ===============================
 # DATA LOADING SETTINGS
 # ===============================
 
