@@ -10,6 +10,7 @@ from utils_app import (
     render_my_roster,
     render_placeholder_table,
     re_calc_rankings,
+    render_full_draft_board,
     reset_draft
 )
 
@@ -22,6 +23,7 @@ if "base_df" not in st.session_state:
 
 round_num = write_current_draft_pick()
 st.write(f"Tip: {config.draft_tips[round_num]}")
+# todo: add relative performance by position, e.g., "Rank 1/10 in RBs, Rank 6/10 in WRs" -- to help with position targeting
 st.write("---")  # Add horizontal separator
 
 # Create page layout with three columns
@@ -64,6 +66,10 @@ with bottom_middle:
 with bottom_right:
     st.subheader("Future Features")
     render_placeholder_table()
+
+st.write("---")  # Add another separator
+st.subheader("Complete Draft Board")
+render_full_draft_board()
 
 # Add reset button at the bottom
 if st.button("Reset draft"):
