@@ -5,7 +5,7 @@ Fantasy Football Draft Assistant
 This Streamlit app provides a real-time fantasy football draft assistant that:
 1. Displays an interactive draft board for marking players as drafted
 2. Calculates and updates player values based on draft progress
-3. Shows live rankings with color-coded information for easy decision-making
+3. Shows live rankings with color-coded information for easy decision making
 4. Provides top remaining players by position
 5. Allows resetting the draft state
 
@@ -46,7 +46,6 @@ KEEPERS = {
     'kyren williams': 133,
     'rashid shaheed': 135
 }
-
 
 def initialize_draft_state():
     """
@@ -113,7 +112,6 @@ def render_draft_board():
         .astype(int)
     )
 
-
 @st.cache_data(show_spinner="Calculating values…")
 def run_model(df):
     """
@@ -143,7 +141,6 @@ def run_model(df):
         .set_index("player")
     )
 
-
 def round_numeric(df):
     """
     Round numeric values in the DataFrame for display.
@@ -163,7 +160,6 @@ def round_numeric(df):
     df2[num_cols] = df2[num_cols].astype(int)  # TODO: Change to round(1) for one decimal
     df2[list(INT_COLS)] = df2[list(INT_COLS)].astype(int)
     return df2
-
 
 def position_tint(row):
     """
@@ -185,7 +181,6 @@ def position_tint(row):
     color = POS_COLORS.get(row["position"], "")
     return [f"background-color: {color}" for _ in row]
 
-
 def create_rankings_styler(df):
     """
     Create a styled DataFrame for the rankings display.
@@ -203,9 +198,9 @@ def create_rankings_styler(df):
     # Define columns for different color gradient styles
     cols_coolwarm = ["rank", "rank_pos", "rank_pos_team"]
     cols_rdylgn = (
-            ["draft_value", "static_value", "dynamic_value", "mkt_share", "available_pts"]
-            + [col for col in df.columns if col.startswith('value_')]
-            + [col for col in df.columns if col.endswith('_projection')]
+        ["draft_value", "static_value", "dynamic_value", "mkt_share", "available_pts"]
+        + [col for col in df.columns if col.startswith('value_')]
+        + [col for col in df.columns if col.endswith('_projection')]
     )
 
     # Apply styling
@@ -217,7 +212,6 @@ def create_rankings_styler(df):
         .background_gradient(subset=cols_coolwarm, cmap="coolwarm")
         .format(precision=1)
     )
-
 
 def render_rankings():
     """
@@ -237,7 +231,6 @@ def render_rankings():
     # Create styler and display rankings
     styler = create_rankings_styler(result_df)
     st.dataframe(styler, use_container_width=True, height=750)
-
 
 def render_position_top_picks():
     """
@@ -270,6 +263,32 @@ def render_position_top_picks():
         height=500,
     )
 
+def write_current_draft_pick():
+    """
+    Write the current draft pick number to the app.
+
+    This function displays the current draft pick number in the app.
+
+    Returns
+    -------
+    None
+        Displays the current draft pick number in the Streamlit app
+    """
+    draft_picks = [
+        pick
+        for pick in st.session_state["base_df"]["drafted"].sort_values().tolist()
+        if pick > 0 and pick not in KEEPERS.values()  # ← need () after values
+    ]
+
+    current_draft_pick = draft_picks[-1] + 1 if draft_picks else 1
+
+    pick_in_round = (current_draft_pick - 1) % config.N_TEAMS + 1
+    round_num = (current_draft_pick - 1) // config.N_TEAMS + 1
+
+    st.write(f"## Current Draft Pick: Round {round_num}, Pick {pick_in_round} ({current_draft_pick} Overall)")
+
+    return round_num
+
 
 def re_calc_rankings():
     """
@@ -301,3 +320,262 @@ def reset_draft():
     """
     st.session_state.clear()
     st.rerun()
+
+def render_draft_history():
+    """
+    Render a table showing all drafted players in pick order.
+
+    This function creates a view of all drafted players sorted by
+    draft pick number, allowing users to see the draft history.
+
+    Returns
+    -------
+    None
+        Displays the draft history table in the Streamlit app
+    """
+    # Get the latest rankings
+    result_df = run_model(st.session_state["base_df"])
+
+    # Reset index to get player as a column
+    result_df_with_player = result_df.reset_index()
+
+    # Prepare draft history dataframe
+    # Start with all players who have been drafted (drafted > 0)
+    drafted_df = result_df_with_player[result_df_with_player['drafted'] > 0].copy()
+
+    # Select and arrange columns
+    draft_history = drafted_df[['drafted', 'player', 'position', 'rank', 'static_value']]
+
+    # Add median_projection column if available
+    projection_cols = [col for col in result_df_with_player.columns if col.endswith('_projection')]
+    if projection_cols:
+        # Assuming the first projection column is the median
+        draft_history['median_projection'] = drafted_df[projection_cols[0]]
+
+    # Handle duplicate pick numbers (if any)
+    if draft_history['drafted'].duplicated().any():
+        # Identify duplicates
+        duplicates = draft_history[draft_history['drafted'].duplicated(keep=False)]
+        st.warning(f"Warning: Multiple players assigned to the same pick number: {duplicates['drafted'].unique().tolist()}")
+
+        # Keep the first player for each pick number
+        draft_history = draft_history.drop_duplicates(subset=['drafted'], keep='first')
+
+    # Sort by draft pick
+    draft_history.sort_values('drafted', inplace=True)
+
+    # Calculate the total number of draft picks
+    required_positions = {
+        'QB': config.ROSTER_N_QB,
+        'RB': config.ROSTER_N_RB,
+        'WR': config.ROSTER_N_WR,
+        'TE': config.ROSTER_N_TE,
+        'FLEX': config.ROSTER_N_FLEX,
+        'K': getattr(config, 'ROSTER_N_K', 0),
+        'DST': getattr(config, 'ROSTER_N_DST', 0),
+        'BN': config.ROSTER_N_BENCH
+    }
+    total_picks = sum(required_positions.values()) * config.N_TEAMS
+
+    # Create a complete pick list with empty rows for unfilled picks
+    all_picks = pd.DataFrame({'drafted': range(1, total_picks + 1)})
+    complete_history = pd.merge(all_picks, draft_history, on='drafted', how='left')
+
+    # Apply styling
+    styled_history = (
+        complete_history
+        .style
+        .apply(lambda row: [f"background-color: {POS_COLORS.get(row['position'], '')}"
+                           if not pd.isna(row['position']) else "" for _ in row], axis=1)
+        .format(precision=1)
+    )
+
+    st.dataframe(styled_history, use_container_width=True, height=400)
+
+def calculate_my_draft_picks():
+    """
+    Calculate my draft picks based on draft position and number of teams.
+
+    This function determines which picks belong to my team based on
+    the draft position and total number of teams in a snake draft.
+
+    Returns
+    -------
+    list
+        List of pick numbers that belong to my team
+    """
+    # Get draft position and number of teams
+    draft_pos = config.DRAFT_POSITION
+    n_teams = config.N_TEAMS
+
+    # Calculate the required number of players per team
+    required_positions = {
+        'QB': config.ROSTER_N_QB,
+        'RB': config.ROSTER_N_RB,
+        'WR': config.ROSTER_N_WR,
+        'TE': config.ROSTER_N_TE,
+        'FLEX': config.ROSTER_N_FLEX,
+        'K': getattr(config, 'ROSTER_N_K', 0),
+        'DST': getattr(config, 'ROSTER_N_DST', 0),
+        'BN': config.ROSTER_N_BENCH
+    }
+    players_per_team = sum(required_positions.values())
+
+    my_picks = []
+    for round_num in range(1, players_per_team + 1):
+        if round_num % 2 == 1:  # Odd rounds go 1 to N
+            pick_num = (round_num - 1) * n_teams + draft_pos
+        else:  # Even rounds go N to 1 (snake draft)
+            pick_num = round_num * n_teams - draft_pos + 1
+        my_picks.append(pick_num)
+
+    return my_picks
+
+def render_my_roster():
+    """
+    Render a table showing my current roster with optimal lineup.
+
+    This function identifies my drafted players, organizes them into
+    an optimal lineup based on projections, and displays the result.
+
+    Returns
+    -------
+    None
+        Displays the my roster table in the Streamlit app
+    """
+    # Get my draft picks
+    my_picks = calculate_my_draft_picks()
+
+    # Get the latest rankings
+    result_df = run_model(st.session_state["base_df"])
+    result_df_with_player = result_df.reset_index()
+
+    # Get my drafted players
+    my_players = result_df_with_player[
+        result_df_with_player['drafted'].isin(my_picks) &
+        (result_df_with_player['drafted'] > 0)
+    ].copy()
+
+    # If no players drafted yet, show empty dataframe with message
+    if len(my_players) == 0:
+        st.info("No players drafted for your team yet.")
+        empty_df = pd.DataFrame(columns=['position', 'player', 'pos_rank', 'median_projection', 'static_value'])
+        st.dataframe(empty_df, use_container_width=True, height=400)
+        return
+
+    # Prepare roster dataframe
+    # Extract position rank (rank_pos) and add to dataframe
+    my_players['pos_rank'] = my_players['rank_pos']
+
+    # Add median_projection column if available
+    projection_cols = [col for col in result_df_with_player.columns if col.endswith('_projection')]
+    if projection_cols:
+        # Assuming the first projection column is the median
+        my_players['median_projection'] = my_players[projection_cols[0]]
+    else:
+        my_players['median_projection'] = 0
+
+    # Select relevant columns
+    my_roster = my_players[['position', 'player', 'pos_rank', 'median_projection', 'static_value']]
+
+    # Sort by position and projection (descending) to get optimal lineup
+    my_roster.sort_values(['position', 'median_projection'], ascending=[True, False], inplace=True)
+
+    # Assign roster positions based on optimal lineup
+    # Create a new column for roster slot
+    my_roster['roster_slot'] = 'BN'  # Default to bench
+
+    # Track filled positions
+    filled_positions = {
+        'QB': 0,
+        'RB': 0,
+        'WR': 0,
+        'TE': 0,
+        'FLEX': 0,
+        'K': 0,
+        'DST': 0,
+        'BN': 0
+    }
+
+    # Get roster settings
+    required_positions = {
+        'QB': config.ROSTER_N_QB,
+        'RB': config.ROSTER_N_RB,
+        'WR': config.ROSTER_N_WR,
+        'TE': config.ROSTER_N_TE,
+        'FLEX': config.ROSTER_N_FLEX,
+        'K': getattr(config, 'ROSTER_N_K', 0),
+        'DST': getattr(config, 'ROSTER_N_DST', 0)
+    }
+
+    # First pass: fill starting positions
+    for idx, row in my_roster.iterrows():
+        pos = row['position']
+        if filled_positions[pos] < required_positions[pos]:
+            my_roster.at[idx, 'roster_slot'] = pos
+            filled_positions[pos] += 1
+
+    # Second pass: fill FLEX positions
+    flex_eligible = config.ROSTER_FLEX_ELIGIBLE_POSITIONS
+    flex_candidates = my_roster[
+        (my_roster['roster_slot'] == 'BN') &
+        (my_roster['position'].isin(flex_eligible))
+    ].sort_values('median_projection', ascending=False)
+
+    for idx, row in flex_candidates.iterrows():
+        if filled_positions['FLEX'] < required_positions['FLEX']:
+            my_roster.at[idx, 'roster_slot'] = 'FLEX'
+            filled_positions['FLEX'] += 1
+
+    # Create a roster order mapping for sorting
+    roster_order = {
+        'QB': 1,
+        'RB': 2,
+        'WR': 3,
+        'TE': 4,
+        'FLEX': 5,
+        'K': 6,
+        'DST': 7,
+        'BN': 8
+    }
+
+    # Add a column for sorting
+    my_roster['sort_order'] = my_roster['roster_slot'].map(roster_order)
+
+    # Sort by roster slot (custom order) and projection (descending)
+    my_roster.sort_values(['sort_order', 'median_projection'], ascending=[True, False], inplace=True)
+
+    # Drop the sort_order column
+    my_roster = my_roster[['roster_slot', 'position', 'player', 'pos_rank', 'median_projection', 'static_value']]
+
+    # Apply styling
+    styled_roster = (
+        my_roster
+        .style
+        .apply(lambda row: [f"background-color: {POS_COLORS.get(row['position'], '')}" for _ in row], axis=1)
+        .format(precision=1)
+    )
+
+    st.dataframe(styled_roster, use_container_width=True, height=400)
+
+def render_placeholder_table():
+    """
+    Render a placeholder table for future expansion.
+
+    This function creates a simple placeholder that can be
+    replaced with actual content in the future.
+
+    Returns
+    -------
+    None
+        Displays a placeholder message in the Streamlit app
+    """
+    st.info("This space is reserved for future features. Some ideas include position balance analysis, team needs, or league-wide position scarcity tracking.")
+
+    # Create an empty dataframe as a visual placeholder
+    placeholder_df = pd.DataFrame({
+        'Feature': ['Position Balance', 'Team Needs', 'Scarcity Analysis', 'Value Over Replacement'],
+        'Status': ['Planned', 'Planned', 'Planned', 'Planned']
+    })
+
+    st.dataframe(placeholder_df, use_container_width=True, height=400)
