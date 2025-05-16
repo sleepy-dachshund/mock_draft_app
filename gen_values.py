@@ -294,34 +294,50 @@ def get_raw_df():
     # quick sort by VORP here.
     raw_df['median_projection'] = raw_df[proj_cols].median(axis=1)
     projection_column = 'median_projection'
-    value_threshold_name = 'vorp'
-    value_threshold_dict = {'QB': 20, 'RB': 32, 'WR': 48, 'TE': 20}
 
-    # Initialize baseline dictionary
-    value_baseline_dict = {pos: 0 for pos in value_threshold_dict.keys()}
+    # ============= START add values ============= #
+    import config
 
-    # Calculate baseline projections for each position
-    for position, threshold in value_threshold_dict.items():
-        position_df = raw_df[raw_df['position'] == position].copy()
+    ls_qb = config.ROSTER_N_QB * config.N_TEAMS
+    ls_rb = int(config.ROSTER_N_RB * config.N_TEAMS + (config.ROSTER_N_FLEX * config.N_TEAMS * 1 / 5))
+    ls_wr = int(config.ROSTER_N_WR * config.N_TEAMS + (config.ROSTER_N_FLEX * config.N_TEAMS * 4 / 5))
+    ls_te = config.ROSTER_N_TE * config.N_TEAMS
 
-        if len(position_df) < threshold:
-            continue
+    value_threshold_name1 = 'vorp'
+    value_threshold_dict1 = {'QB': ls_qb * 2, 'RB': ls_rb * 2, 'WR': ls_wr * 2, 'TE': ls_te * 2}
 
-        # Find threshold player
-        baseline_row = position_df.iloc[threshold - 1]
-        baseline_projection = baseline_row[projection_column]
+    value_threshold_name2 = 'vols'
+    value_threshold_dict2 = {'QB': ls_qb, 'RB': ls_rb, 'WR': ls_wr, 'TE': ls_te}
 
-        # Update baseline dictionary
-        value_baseline_dict[position] = baseline_projection
+    for col_name, col_dict in zip([value_threshold_name1, value_threshold_name2], [value_threshold_dict1, value_threshold_dict2]):
+        # Initialize baseline dictionary
+        value_baseline_dict = {pos: 0 for pos in col_dict.keys()}
 
-    # Add baseline and value columns
-    baseline_col = f'baseline_{value_threshold_name}'
-    value_col = f'value_{value_threshold_name}'
+        # Calculate baseline projections for each position
+        for position, threshold in col_dict.items():
+            position_df = raw_df[raw_df['position'] == position].copy()
 
-    raw_df[baseline_col] = raw_df['position'].map(value_baseline_dict)
-    raw_df[value_col] = (raw_df[projection_column] - raw_df[baseline_col]).clip(lower=0).round(1)
+            if len(position_df) < threshold:
+                continue
 
-    raw_df.sort_values(by=value_col, ascending=False, inplace=True)
+            # Find threshold player
+            baseline_row = position_df.iloc[threshold - 1]
+            baseline_projection = baseline_row[projection_column]
+
+            # Update baseline dictionary
+            value_baseline_dict[position] = baseline_projection
+
+        # Add baseline and value columns
+        baseline_col = f'baseline_{col_name}'
+        value_col = f'value_{col_name}'
+
+        raw_df[baseline_col] = raw_df['position'].map(value_baseline_dict)
+        raw_df[value_col] = (raw_df[projection_column] - raw_df[baseline_col]).clip(lower=0).round(1)
+    # ============= END add values ============= #
+
+    # Combine values and sort to help with draft board ordering
+    raw_df['combined_value'] = raw_df[[col for col in raw_df.columns if col.startswith('value_')]].sum(axis=1)
+    raw_df.sort_values(by='combined_value', ascending=False, inplace=True)
     raw_df.reset_index(drop=True, inplace=True)
 
     return raw_df[output_cols]
@@ -329,6 +345,7 @@ def get_raw_df():
 def value_players(df: DataFrame,
                   projection_column_prefix: str = 'projection_',
                   vopn: int = 5,
+                  dynamic_multiplier: float = 0.2,
                   draft_mode: bool = True) -> DataFrame:
     """
     Calculate player values based on projections and thresholds.
@@ -364,6 +381,7 @@ def value_players(df: DataFrame,
             value_threshold_name=threshold_name,
             value_threshold_dict={
                 'QB': 6 if threshold_name == 'elite' else ls_qb if threshold_name == 'last_starter' else 17,
+                # todo: confirm elite thresholds, these are very subjective
                 'RB': 8 if threshold_name == 'elite' else ls_rb if threshold_name == 'last_starter' else 55,
                 'WR': 15 if threshold_name == 'elite' else ls_wr if threshold_name == 'last_starter' else 60,
                 'TE': 3 if threshold_name == 'elite' else ls_te if threshold_name == 'last_starter' else 17,
@@ -374,10 +392,15 @@ def value_players(df: DataFrame,
     calculator.add_rank_cols()  # Calculate Position Rank, Market Share
     calculator.add_vop_columns(n=vopn, projection_column='available_pts')  # Add VOPn columns
     calculator.calc_dynamic_value()  # Calculate dynamic value
-    calculator.combine_static_and_dynamic_value(draft_mode=draft_mode)  # Combine static and dynamic values to get draft_value
+    calculator.combine_static_and_dynamic_value(draft_mode=draft_mode, dynamic_multiplier=dynamic_multiplier)  # Combine static and dynamic values to get draft_value
+    # todo: add ADP column
     calculator.order_columns()  # Order columns for better readability
 
-    return calculator.get_dataframe().sort_values(by=['draft_value', 'static_value', 'median_projection'], ascending=False).reset_index(drop=True)
+    return (calculator
+            .get_dataframe()
+            .sort_values(by=['draft_value', 'static_value', 'value_elite', 'value_last_starter', 'value_replacement', 'median_projection'],
+                         ascending=[False, False, False, False, False, False])
+            .reset_index(drop=True))
 
 if __name__ == "__main__":
     import config
