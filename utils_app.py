@@ -134,8 +134,9 @@ def run_model(df):
         value_players(
             df,
             projection_column_prefix=config.PROJECTION_COLUMN_PREFIX,
-            vopn=5,
-            draft_mode=True,
+            vopn=10,
+            dynamic_multiplier=0.2,
+            draft_mode=True
         )
         .drop(columns=["id"])
         .set_index("player")
@@ -579,3 +580,135 @@ def render_placeholder_table():
     })
 
     st.dataframe(placeholder_df, use_container_width=True, height=400)
+
+
+def render_full_draft_board():
+    """
+    Render a complete draft board showing all teams and rounds.
+
+    This function creates a visual representation of the entire draft,
+    with teams as columns and rounds as rows, showing which player
+    was taken with each pick.
+
+    Returns
+    -------
+    None
+        Displays the full draft board in the Streamlit app
+    """
+    # Get the latest rankings
+    result_df = run_model(st.session_state["base_df"])
+    result_df_with_player = result_df.reset_index()
+
+    # Get drafted players
+    drafted_players = result_df_with_player[result_df_with_player['drafted'] > 0].copy()
+
+    # Calculate total rounds based on roster settings
+    required_positions = {
+        'QB': config.ROSTER_N_QB,
+        'RB': config.ROSTER_N_RB,
+        'WR': config.ROSTER_N_WR,
+        'TE': config.ROSTER_N_TE,
+        'FLEX': config.ROSTER_N_FLEX,
+        'K': getattr(config, 'ROSTER_N_K', 0),
+        'DST': getattr(config, 'ROSTER_N_DST', 0),
+        'BN': config.ROSTER_N_BENCH
+    }
+    total_rounds = sum(required_positions.values())
+    n_teams = config.N_TEAMS
+
+    # Create empty draft board
+    # Initialize with empty strings
+    draft_board = pd.DataFrame(
+        index=range(1, total_rounds + 1),
+        columns=range(1, n_teams + 1),
+        data=""
+    )
+
+    # Rename index and columns for clarity
+    draft_board.index.name = "Round"
+    draft_board.columns = [f"Team {i}" for i in range(1, n_teams + 1)]
+
+    # Function to convert pick number to (round, team) coordinates
+    def pick_to_coordinates(pick_num, n_teams):
+        round_num = (pick_num - 1) // n_teams + 1
+        pick_in_round = (pick_num - 1) % n_teams
+
+        if round_num % 2 == 1:  # Odd rounds go left to right
+            team_num = pick_in_round + 1
+        else:  # Even rounds go right to left (snake)
+            team_num = n_teams - pick_in_round
+
+        return round_num, team_num
+
+    # Fill draft board with drafted players
+    for _, row in drafted_players.iterrows():
+        pick_num = int(row['drafted'])
+        if pick_num <= total_rounds * n_teams:  # Ensure pick is within board range
+            round_num, team_num = pick_to_coordinates(pick_num, n_teams)
+
+            # Create formatted cell content with player info
+            player_text = (
+                f"{row['player']} ({row['position']})\n"
+                f"Rank: {int(row['rank'])}, Value: {int(row['static_value'])}"
+            )
+
+            # Add to draft board
+            draft_board.at[round_num, f"Team {team_num}"] = player_text
+
+    # Highlight the user's team column
+    my_team_col = f"Team {config.DRAFT_POSITION}"
+
+    # Create a color mapping based on positions in the data
+    position_color_map = {}
+    for idx, row in draft_board.iterrows():
+        for col in draft_board.columns:
+            cell_value = draft_board.at[idx, col]
+            if cell_value and '(' in cell_value and ')' in cell_value:
+                try:
+                    position = cell_value.split('(')[1].split(')')[0]
+                    position_color_map[(idx, col)] = POS_COLORS.get(position, '')
+                except:
+                    # Skip if parsing fails
+                    pass
+
+    # Apply styling in a safer way
+    def style_draft_board(df):
+        # Start with a basic style
+        styler = df.style.set_properties(**{
+            'white-space': 'pre-wrap',
+            'text-align': 'left',
+            'vertical-align': 'top',
+            'padding': '10px',
+            'border': '1px solid #ddd'
+        })
+
+        # Highlight my team's column if it exists
+        if my_team_col in df.columns:
+            styler = styler.set_properties(
+                subset=pd.IndexSlice[:, my_team_col],
+                **{'background-color': '#e6f3ff', 'font-weight': 'bold'}
+            )
+
+        # Add alternating row colors for readability
+        styler = styler.set_table_styles([
+            {'selector': 'tr:nth-child(even)', 'props': [('background-color', '#f5f5f5')]},
+            {'selector': 'tr:nth-child(odd)', 'props': [('background-color', '#ffffff')]},
+            {'selector': 'th', 'props': [('background-color', '#4CAF50'), ('color', 'white'), ('font-weight', 'bold')]}
+        ])
+
+        # Apply position-based colors to individual cells
+        for (idx, col), color in position_color_map.items():
+            if color:
+                styler = styler.set_properties(
+                    subset=pd.IndexSlice[idx, col],
+                    **{'background-color': color}
+                )
+
+        return styler
+
+    # Apply styling and display
+    st.dataframe(
+        style_draft_board(draft_board),
+        use_container_width=True,
+        height=max(400, total_rounds * 45)  # Dynamic height based on rounds
+    )
