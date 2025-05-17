@@ -233,7 +233,7 @@ def render_rankings():
     styler = create_rankings_styler(result_df)
     st.dataframe(styler, use_container_width=True, height=750)
 
-def render_position_top_picks():
+def render_position_top_picks(n=5):
     """
     Render a table showing the top 3 available players at each position.
 
@@ -249,16 +249,16 @@ def render_position_top_picks():
     result_df = run_model(st.session_state["base_df"])
 
     # Extract top 3 players by position
-    top3 = result_df.groupby("position").head(3)[["position", "draft_value", "rank", "rank_pos"]]
-    top3.sort_values(["position", "draft_value"], ascending=[True, False], inplace=True)
-    top3[["draft_value", "rank", "rank_pos"]] = top3[["draft_value", "rank", "rank_pos"]].astype(int)
+    top_n = result_df.groupby("position").head(n)[["position", "draft_value", "static_value", "rank", "rank_pos"]]
+    top_n.sort_values(["position", "draft_value"], ascending=[True, False], inplace=True)
+    top_n[["draft_value", "static_value", "rank", "rank_pos"]] = top_n[["draft_value", "static_value", "rank", "rank_pos"]].astype(int)
 
     # Display with styling
     st.dataframe(
-        top3
+        top_n
         .style
         .apply(position_tint, axis=1)
-        .background_gradient(subset=["draft_value"], cmap="RdYlGn")
+        .background_gradient(subset=["draft_value", "static_value"], cmap="RdYlGn")
         .format(precision=1),
         use_container_width=True,
         height=500,
