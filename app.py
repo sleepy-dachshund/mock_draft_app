@@ -37,7 +37,7 @@ with middle:
 
 # Render top picks by position in right column
 with right:
-    st.subheader("Pos. Top 3 Remaining")
+    st.subheader("Top Remaining")
     render_position_top_picks()
 
 # Add button to manually clear cache and recalculate
