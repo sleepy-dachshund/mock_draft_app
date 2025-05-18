@@ -27,7 +27,7 @@ class DraftAnalyzer:
         """Return table indexed by QB1, RB1 … BNn."""
         starters, bench = self._split_starters_bench()
         table = pd.concat([starters, bench]).reindex(self.lineup_slots)
-        return table[["player", "team", "rank_pos",
+        return table[["player", "position", "team", "rank_pos",
                       "median_projection", "static_value", "round_drafted"]]
 
     def pos_sums(self) -> Dict[str, float]:

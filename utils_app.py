@@ -16,6 +16,7 @@ value calculations that account for positional scarcity as the draft progresses.
 import streamlit as st
 import pandas as pd
 import config
+from draft_analyzer import DraftAnalyzer
 from gen_values import get_raw_df, value_players
 
 # Global parameters
@@ -90,6 +91,7 @@ def render_draft_board():
     None
         Updates st.session_state["base_df"] based on user edits
     """
+    st.info("Mark players as drafted by changing the 'drafted' column value.")
     # Display editable data table
     edited_view = st.data_editor(
         st.session_state["edit_view"],
@@ -290,6 +292,19 @@ def write_current_draft_pick():
 
     return round_num
 
+def write_draft_notes(round_num):
+
+    # hard-coded tips from config:
+    st.write(f"Tip: {config.draft_tips[round_num]}")
+
+    # # draft analyzer:
+    # result_df = run_model(st.session_state["base_df"])
+    # lineup = DraftAnalyzer(result_df)
+    # roster_df = lineup.roster_table()
+    # pos_totals = lineup.pos_sums()
+    # pct_max, pct_league = lineup.strength_scores()
+
+
 
 def re_calc_rankings():
     """
@@ -434,120 +449,20 @@ def calculate_my_draft_picks():
 
 def render_my_roster():
     """
-    Render a table showing my current roster with optimal lineup.
+    Render a table showing my current roster.
 
-    This function identifies my drafted players, organizes them into
-    an optimal lineup based on projections, and displays the result.
+    This function identifies my drafted players, organizes them into a lineup, and displays the result.
 
     Returns
     -------
     None
         Displays the my roster table in the Streamlit app
     """
-    # Get my draft picks
-    my_picks = calculate_my_draft_picks()
 
-    # Get the latest rankings
-    result_df = run_model(st.session_state["base_df"])
-    result_df_with_player = result_df.reset_index()
-
-    # Get my drafted players
-    my_players = result_df_with_player[
-        result_df_with_player['drafted'].isin(my_picks) &
-        (result_df_with_player['drafted'] > 0)
-    ].copy()
-
-    # If no players drafted yet, show empty dataframe with message
-    if len(my_players) == 0:
-        st.info("No players drafted for your team yet.")
-        empty_df = pd.DataFrame(columns=['position', 'player', 'pos_rank', 'median_projection', 'static_value'])
-        st.dataframe(empty_df, use_container_width=True, height=400)
-        return
-
-    # Prepare roster dataframe
-    # Extract position rank (rank_pos) and add to dataframe
-    my_players['pos_rank'] = my_players['rank_pos']
-
-    # Add median_projection column if available
-    projection_cols = [col for col in result_df_with_player.columns if col.endswith('_projection')]
-    if projection_cols:
-        # Assuming the first projection column is the median
-        my_players['median_projection'] = my_players[projection_cols[0]]
-    else:
-        my_players['median_projection'] = 0
-
-    # Select relevant columns
-    my_roster = my_players[['position', 'player', 'pos_rank', 'median_projection', 'static_value']]
-
-    # Sort by position and projection (descending) to get optimal lineup
-    my_roster.sort_values(['position', 'median_projection'], ascending=[True, False], inplace=True)
-
-    # Assign roster positions based on optimal lineup
-    # Create a new column for roster slot
-    my_roster['roster_slot'] = 'BN'  # Default to bench
-
-    # Track filled positions
-    filled_positions = {
-        'QB': 0,
-        'RB': 0,
-        'WR': 0,
-        'TE': 0,
-        'FLEX': 0,
-        'K': 0,
-        'DST': 0,
-        'BN': 0
-    }
-
-    # Get roster settings
-    required_positions = {
-        'QB': config.ROSTER_N_QB,
-        'RB': config.ROSTER_N_RB,
-        'WR': config.ROSTER_N_WR,
-        'TE': config.ROSTER_N_TE,
-        'FLEX': config.ROSTER_N_FLEX,
-        'K': getattr(config, 'ROSTER_N_K', 0),
-        'DST': getattr(config, 'ROSTER_N_DST', 0)
-    }
-
-    # First pass: fill starting positions
-    for idx, row in my_roster.iterrows():
-        pos = row['position']
-        if filled_positions[pos] < required_positions[pos]:
-            my_roster.at[idx, 'roster_slot'] = pos
-            filled_positions[pos] += 1
-
-    # Second pass: fill FLEX positions
-    flex_eligible = config.ROSTER_FLEX_ELIGIBLE_POSITIONS
-    flex_candidates = my_roster[
-        (my_roster['roster_slot'] == 'BN') &
-        (my_roster['position'].isin(flex_eligible))
-    ].sort_values('median_projection', ascending=False)
-
-    for idx, row in flex_candidates.iterrows():
-        if filled_positions['FLEX'] < required_positions['FLEX']:
-            my_roster.at[idx, 'roster_slot'] = 'FLEX'
-            filled_positions['FLEX'] += 1
-
-    # Create a roster order mapping for sorting
-    roster_order = {
-        'QB': 1,
-        'RB': 2,
-        'WR': 3,
-        'TE': 4,
-        'FLEX': 5,
-        'K': 6,
-        'DST': 7,
-        'BN': 8
-    }
-
-    # Add a column for sorting
-    my_roster['sort_order'] = my_roster['roster_slot'].map(roster_order)
-
-    # Sort by roster slot (custom order) and projection (descending)
-    my_roster.sort_values(['sort_order', 'median_projection'], ascending=[True, False], inplace=True)
-
-    # Drop the sort_order column
-    my_roster = my_roster[['roster_slot', 'position', 'player', 'pos_rank', 'median_projection', 'static_value']]
+    # draft analyzer:
+    result_df = value_players(st.session_state["base_df"], draft_mode=True)
+    lineup = DraftAnalyzer(result_df)
+    my_roster = lineup.roster_table()
 
     # Apply styling
     styled_roster = (
@@ -573,13 +488,21 @@ def render_placeholder_table():
     """
     st.info("This space is reserved for future features. Some ideas include position balance analysis, team needs, or league-wide position scarcity tracking.")
 
-    # Create an empty dataframe as a visual placeholder
-    placeholder_df = pd.DataFrame({
-        'Feature': ['Position Balance', 'Team Needs', 'Scarcity Analysis', 'Value Over Replacement'],
-        'Status': ['Planned', 'Planned', 'Planned', 'Planned']
-    })
+    # draft analyzer:
+    result_df = value_players(st.session_state["base_df"], draft_mode=True)
+    lineup = DraftAnalyzer(result_df)
+    roster_df = lineup.roster_table()
+    pos_totals = lineup.pos_sums()
+    pct_max, pct_league = lineup.strength_scores()
 
-    st.dataframe(placeholder_df, use_container_width=True, height=400)
+    # positional group value dataframe -- turn pos_totals dict, pct_league dict, and pct_max dict into a dataframe
+    pos_totals_df = pd.DataFrame.from_dict(pos_totals, orient='index', columns=['points'])
+    pos_totals_df['pct_league'] = pct_league.values()
+    pos_totals_df['pct_max'] = pct_max.values()
+    pos_totals_df['position'] = pos_totals_df.index
+
+
+    st.dataframe(pos_totals_df, use_container_width=True, height=400)
 
 
 def render_full_draft_board():

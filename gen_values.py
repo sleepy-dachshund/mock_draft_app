@@ -344,7 +344,7 @@ def get_raw_df():
 
 def value_players(df: DataFrame,
                   projection_column_prefix: str = 'projection_',
-                  vopn: int = 5,
+                  vopn: int = 10,
                   dynamic_multiplier: float = 0.2,
                   draft_mode: bool = True) -> DataFrame:
     """
@@ -412,3 +412,5 @@ if __name__ == "__main__":
 
     # Calculate player values
     result_df = value_players(input_df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX, vopn=5, draft_mode=True)
+
+    print(result_df.columns)
