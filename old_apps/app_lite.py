@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import config
-from gen_values import get_raw_df, value_players   # adjust module names
+from src.gen_values import get_raw_df, value_players   # adjust module names
 
 st.set_page_config(page_title="Draft Assistant", layout="wide")
 

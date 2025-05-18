@@ -14,9 +14,8 @@ value calculations that account for positional scarcity as the draft progresses.
 """
 
 import streamlit as st
-import pandas as pd
 import config
-from gen_values import get_raw_df, value_players
+from src.gen_values import get_raw_df, value_players
 
 # Global parameters
 MY_DRAFT_PICK = config.DRAFT_POSITION

@@ -1,5 +1,4 @@
 import streamlit as st
-import config
 from utils_app import (
     initialize_draft_state,
     render_draft_board,
