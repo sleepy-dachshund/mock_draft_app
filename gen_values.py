@@ -193,7 +193,10 @@ class ProjectionValueCalculator:
         self.df['dynamic_value'] = self.df[[col for col in self.df.columns if col.startswith('vop')]].sum(axis=1)
         self.df['dynamic_value'] = (self.df['dynamic_value'] / self.df['dynamic_value'].max() * 100).round(1)
 
-    def calc_static_value(self) -> None:
+    def calc_static_value(self,
+                          weight_elite: float = 1/3,
+                          weight_starter: float = 1/3,
+                          weight_replacement: float = 1/3) -> None:
         """
         Calculate static value based on the specified value column.
 
@@ -203,7 +206,11 @@ class ProjectionValueCalculator:
             The name of the value column to use for calculation
         """
         # Combine value columns
-        self.df['static_value'] = self.df[[col for col in self.df.columns if col.startswith('value_')]].sum(axis=1)
+        # self.df['static_value'] = self.df[[col for col in self.df.columns if col.startswith('value_')]].sum(axis=1)
+        self.df['static_value'] = (self.df['value_elite'] * weight_elite +
+                                   self.df['value_last_starter'] * weight_starter +
+                                   self.df['value_replacement'] * weight_replacement)
+
         self.df['static_value'] = (self.df['static_value'] / self.df['static_value'].max() * 100).round(1)
 
     def add_rank_cols(self) -> None:
@@ -343,6 +350,7 @@ def get_raw_df():
     return raw_df[output_cols]
 
 def value_players(df: DataFrame,
+                  static_value_weights: Optional[Dict[str, float]] = None,
                   projection_column_prefix: str = 'projection_',
                   vopn: int = 10,
                   dynamic_multiplier: float = 0.2,
@@ -388,7 +396,9 @@ def value_players(df: DataFrame,
             }
         )
 
-    calculator.calc_static_value()  # Calculate static value
+    calculator.calc_static_value(weight_elite=static_value_weights['elite'],
+                                 weight_starter=static_value_weights['last_starter'],
+                                 weight_replacement=static_value_weights['replacement'])  # Calculate static value
     calculator.add_rank_cols()  # Calculate Position Rank, Market Share
     calculator.add_vop_columns(n=vopn, projection_column='available_pts')  # Add VOPn columns
     calculator.calc_dynamic_value()  # Calculate dynamic value
@@ -410,7 +420,22 @@ if __name__ == "__main__":
     raw_df = get_raw_df()
     input_df = raw_df.copy()
 
+    # ========= PARAMS TO OPTIMIZE ========= #
+    static_value_weights = {
+        'elite': 1 / 3,
+        'last_starter': 1 / 3,
+        'replacement': 1 / 3,
+    }
+    vopn = 5
+    dynamic_multiplier = 0.2
+    # ====================================== #
+
     # Calculate player values
-    result_df = value_players(input_df, projection_column_prefix=config.PROJECTION_COLUMN_PREFIX, vopn=5, draft_mode=True)
+    result_df = value_players(input_df,
+                              static_value_weights=static_value_weights,
+                              projection_column_prefix=config.PROJECTION_COLUMN_PREFIX,
+                              vopn=vopn,
+                              dynamic_multiplier=dynamic_multiplier,
+                              draft_mode=True)
 
     print(result_df.columns)
