@@ -1,118 +1,45 @@
-import os
-import traceback
 import warnings
 warnings.filterwarnings("ignore")
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, Tuple, Optional
 
 import pandas as pd
-from pandas.tseries.offsets import BDay
-from itertools import product
 import numpy as np
 import matplotlib.pyplot as plt
 plt.style.use('fivethirtyeight')
 
 import config
+from gen_values import value_players, get_raw_df
+from sim_utils import (static_value_weights_generator, add_vopn_param, add_dynamic_multiplier_param,
+                       add_team_need_param, param_array_to_df, get_my_picks_list)
+from sim_funcs import (simulate_one_draft, make_a_pick, check_filled_starters,
+                       evaluate_draft, run_all_simulations)
 
-
-def static_value_weights_generator() -> np.ndarray:
-    step = 0.16
-    grid = np.arange(0, 1 + step, step)
-
-    # triplets A, B, C with A+B+C == 1.0
-    weights = (
-        (a, b, 1.0 - a - b)  # C is implied
-        for a, b in product(grid, repeat=2)
-        if a + b <= 1.0  # keeps C ≥ 0
-    )
-
-    weights_array = []
-    for a, b, c in weights:
-        weights_array.append((a, b, c))
-
-    weights_array = np.array(weights_array, dtype=float)
-
-    return weights_array
-
-def add_vopn_param(weights_array, param_list: list = None):
-    """
-    Adds a 'vopn' parameter to the weights array.
-    Duplicate array n times and add a new column range [0, n].
-    """
-    if param_list is None:
-        vopn = np.array([0, 2, 5, 9])
-    else:
-        vopn = np.array(param_list)
-    # merge the vopn with the static weights
-    new_array = np.array(
-        [np.concatenate((weights, [v])) for weights, v in product(weights_array, vopn)]
-    )
-    return new_array
-
-def add_dynamic_multiplier_param(param_array, param_list: list = None):
-    """
-    Adds a 'dynamic_multiplier' parameter to the weights array.
-    Duplicate array n times and add a new column range [0, n].
-    """
-    if param_list is None:
-        dynamic_multiplier = np.array([0.0, 0.1, 0.2, 0.5])
-    else:
-        dynamic_multiplier = np.array(param_list)
-    new_array = np.array(
-        [np.concatenate((weights, [v])) for weights, v in product(param_array, dynamic_multiplier)]
-    )
-    return new_array
-
-def add_team_need_param(param_array: np.ndarray, param_list: list = None) -> np.ndarray:
-    if param_list is None:
-        team_needs = np.array([0, 0.25, 0.5, 0.75, 1])
-    else:
-        team_needs = np.array(param_list)
-    new_array = np.array(
-        [np.concatenate((weights, [v])) for weights, v in product(param_array, team_needs)]
-    )
-    return new_array
-
-def param_array_to_df(param_array: np.ndarray) -> pd.DataFrame:
-    """
-    Converts the parameter array to a DataFrame with appropriate column names.
-    """
-    columns = ['elite', 'last_starter', 'replacement', 'vopn', 'dynamic_multiplier', 'team_needs']
-    df = pd.DataFrame(param_array, columns=columns, dtype=float)
-    return df
-
-
-param_array = static_value_weights_generator()
-param_array = add_vopn_param(param_array, param_list=[0, 2, 5, 9])
-param_array = add_dynamic_multiplier_param(param_array, param_list=[0.0, 0.25, 0.5])
-param_array = add_team_need_param(param_array, param_list=[0, 0.5, 0.75, 1])
-df_params = param_array_to_df(param_array)
-
-def get_my_picks_list(rounds, teams, draft_pos) -> list:
-    my_picks = []
-    for round_num in range(1, rounds + 1):
-        if round_num % 2 == 1:  # Odd rounds go 1 to N
-            pick_num = (round_num - 1) * teams + draft_pos
-        else:  # Even rounds go N to 1 (snake draft)
-            pick_num = round_num * teams - draft_pos + 1
-        my_picks.append(pick_num)
-    return my_picks
+''' =================================================================================================================
+=====================================================================================================================
+        EXECUTION
+=====================================================================================================================
+================================================================================================================= '''
 
 @dataclass
 class DraftFig:
     PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]  # Gets from 'tuning_simulator' to 'fantasy_football'
     CACHE_DIR: Path = PROJECT_ROOT / "data" / "draft_sims"
 
-    df_params = df_params  # columns = ['elite', 'last_starter', 'replacement', 'vopn', 'dynamic_multiplier', 'team_needs']
+    proj_col_prefix: str = config.PROJECTION_COLUMN_PREFIX  # e.g., 'proj_'
 
+    # draft sim parameter dataframe (each row is a param set for a draft simulation)
+    df_params = None  # columns = ['elite', 'last_starter', 'replacement', 'vopn', 'dynamic_multiplier', 'team_needs']
+
+    # starting roster settings
     n_qb: int = config.ROSTER_N_QB
     n_rb: int = config.ROSTER_N_RB
     n_wr: int = config.ROSTER_N_WR
     n_te: int = config.ROSTER_N_TE
     n_flex: int = config.ROSTER_N_FLEX
     flex_pos = config.ROSTER_FLEX_ELIGIBLE_POSITIONS
+
     n_k: int = config.ROSTER_N_K
     n_dst: int = config.ROSTER_N_DST
     n_bench: int = config.ROSTER_N_BENCH
@@ -125,40 +52,88 @@ class DraftFig:
     draft_pos: int = config.DRAFT_POSITION
 
     my_picks = get_my_picks_list(n_rounds, n_teams, draft_pos)
+    other_teams_picks_dict = None
 
 
-cfg = DraftFig()
+if __name__ == "__main__":
 
-from gen_values import value_players, get_raw_df
+    TEST = True
 
-raw_df = get_raw_df()
+    # --- Configuration ---
 
-'''
-example sim run
-'''
-# todo: find a way to include the 'team_needs' parameter in value_players: the purpose is to reduce the draft_value of positions that are not needed (already filled starter slots for those positions)
-input_df = raw_df.copy()
-param_set = 0  # index of the parameter set, will loop through range(len(cfg.df_params))
-result_df = value_players(input_df,
-                          static_value_weights={'elite': cfg.df_params['elite'].values[param_set],
-                                                'last_starter': cfg.df_params['last_starter'].values[param_set],
-                                                'replacement': cfg.df_params['replacement'].values[param_set]},
-                          projection_column_prefix=config.PROJECTION_COLUMN_PREFIX,
-                          vopn=int(cfg.df_params['vopn'].values[param_set]),
-                          dynamic_multiplier=cfg.df_params['dynamic_multiplier'].values[param_set],
-                          draft_mode=True)
+    # DRAFT CONFIG OBJECT
+    cfg = DraftFig()
+    cfg.other_teams_picks_dict = {i: get_my_picks_list(cfg.n_rounds, cfg.n_teams, i) for i in range(1, cfg.n_teams + 1) if i != cfg.draft_pos}
 
-'''
-print(result_df.columns)
-Index(['id', 'player', 'team', 'position',  # player identifying columns 
-        'draft_value', 'static_value', 'dynamic_value',  # we want to test out our param set from df_params to figure out how to make the best draft_value (which is a combination of static and dynamic values) 
-       'drafted',  # this will update with each pick, the player picked will have a 'drafted' value update from 0 to 1 
-       'median_projection',  # we'll use the sum of this (by starters only) to evaluate our draft 
-       
-       # other columns not necessary for param tuning, draft sim, or draft grading
-       'rank', 'rank_pos', 'rank_pos_team', 'mkt_share', 
-       'available_pts', 'high_projection', 'low_projection', 
-       'value_elite', 'value_last_starter', 'value_replacement'],
-      dtype='object')
-'''
+    # PARAMETER SET TO RUN SIMULATIONS ON
+    param_array = static_value_weights_generator()
+    param_array = add_vopn_param(param_array, param_list=[2, 5])
+    param_array = add_dynamic_multiplier_param(param_array, param_list=[0.0, 0.3])
+    param_array = add_team_need_param(param_array, param_list=[0.05, 0.5])
+    df_params = param_array_to_df(param_array)
 
+    if TEST:
+        df_params_test = df_params.sample(5).reset_index(drop=True)
+        cfg.df_params = df_params_test.copy()  # Use a smaller sample for testing
+        N_SIMULATIONS_PER_SET = 20
+    else:
+        cfg.df_params = df_params.copy()  # Make a copy to avoid modifying the original DataFrame
+        N_SIMULATIONS_PER_SET = 25
+
+    # RAW DATA -- PRE-VALUATION
+    raw_df = get_raw_df().reset_index(drop=True)
+
+    # from gen_values import value_players
+
+    # --- Execution ---
+    print(f"Starting simulations for {len(cfg.df_params)} parameter sets.")
+    print(f"Each parameter set will be simulated {N_SIMULATIONS_PER_SET} times.")
+    print(f'Total of {len(cfg.df_params) * N_SIMULATIONS_PER_SET} simulations will be run.')
+
+    # Run all simulations for all parameter sets
+    results_df = run_all_simulations(
+        df_params=cfg.df_params,
+        base_df_players=raw_df.copy(),
+        draft_cfg=cfg,
+        n_sims=N_SIMULATIONS_PER_SET
+    ).sort_values(by='my_starters_projection', ascending=False).reset_index(drop=True)
+
+    # --- Output ---
+    print("\nSimulation complete.")
+
+    param_grading = results_df.groupby('param_set_id').agg({
+        'my_starters_projection': ['mean', 'std', 'min', 'max'],
+        'my_starters_static_value': 'mean',
+        'rank_proj': 'mean',
+        'rank_static': 'mean',
+        'elite': 'mean',
+        'last_starter': 'mean',
+        'replacement': 'mean',
+        'vopn': 'mean',
+        'dynamic_multiplier': 'mean',
+        'team_needs': 'mean',
+    })
+    # collapse multi-index columns
+    param_grading.columns = ['_'.join(col) for col in param_grading.columns.to_flat_index()]
+    param_grading['Sharpe'] = param_grading['my_starters_projection_mean'] / param_grading['my_starters_projection_std']
+    param_grading = param_grading.sort_values(by='my_starters_projection_mean', ascending=False).reset_index(drop=True)
+
+
+    best_param_set = param_grading.iloc[0].param_set_id
+    best_params = df_params[df_params.index == best_param_set].iloc[0]
+    print(f"\nBest param set: {best_param_set}")
+    print(f"Best params: {best_params.to_dict()}")
+    print(f"Best projection: {param_grading.iloc[0].my_starters_projection:.2f}")
+
+    # save results and param_grading to CSV files
+    results_df.to_csv(cfg.CACHE_DIR / "draft_simulation_results.csv", index=False)
+    param_grading.to_csv(cfg.CACHE_DIR / "draft_simulation_param_grading.csv", index=False)
+    results_df.to_parquet(cfg.CACHE_DIR / "draft_simulation_results.parquet", index=False)
+    param_grading.to_parquet(cfg.CACHE_DIR / "draft_simulation_param_grading.parquet", index=False)
+    print("\nFull results and param grading saved to cache.")
+
+
+    # Optional: Save results to a file for later analysis
+    # results_output_path = cfg.CACHE_DIR / "draft_simulation_results.csv"
+    # results_df.to_csv(results_output_path, index=False)
+    # print(f"\nFull results saved to: {results_output_path}")

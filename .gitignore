@@ -7,3 +7,6 @@ data/input/2025/projections/20250506_DraftSharks.csv
 .idea/modules.xml
 .idea/vcs.xml
 /logs
+/data/draft_sims
+/data/output
+/data/output
