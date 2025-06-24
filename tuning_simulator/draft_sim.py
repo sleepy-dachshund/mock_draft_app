@@ -68,17 +68,17 @@ if __name__ == "__main__":
     # PARAMETER SET TO RUN SIMULATIONS ON
     param_array = static_value_weights_generator()
     param_array = add_vopn_param(param_array, param_list=[2, 5])
-    param_array = add_dynamic_multiplier_param(param_array, param_list=[0.0, 0.3])
-    param_array = add_team_need_param(param_array, param_list=[0.05, 0.5])
+    param_array = add_dynamic_multiplier_param(param_array, param_list=[0.0, 0.8])
+    param_array = add_team_need_param(param_array, param_list=[0.05, 0.8])
     df_params = param_array_to_df(param_array)
 
     if TEST:
         df_params_test = df_params.sample(5).reset_index(drop=True)
         cfg.df_params = df_params_test.copy()  # Use a smaller sample for testing
-        N_SIMULATIONS_PER_SET = 20
+        N_SIMULATIONS_PER_SET = 5
     else:
         cfg.df_params = df_params.copy()  # Make a copy to avoid modifying the original DataFrame
-        N_SIMULATIONS_PER_SET = 25
+        N_SIMULATIONS_PER_SET = 30
 
     # RAW DATA -- PRE-VALUATION
     raw_df = get_raw_df().reset_index(drop=True)
@@ -115,15 +115,22 @@ if __name__ == "__main__":
     })
     # collapse multi-index columns
     param_grading.columns = ['_'.join(col) for col in param_grading.columns.to_flat_index()]
-    param_grading['Sharpe'] = param_grading['my_starters_projection_mean'] / param_grading['my_starters_projection_std']
-    param_grading = param_grading.sort_values(by='my_starters_projection_mean', ascending=False).reset_index(drop=True)
+    param_grading['sharpe'] = param_grading['my_starters_projection_mean'] / param_grading['my_starters_projection_std']
+    param_grading = param_grading.sort_values(by='my_starters_projection_mean', ascending=False)
+    first_cols = ['my_starters_projection_mean', 'sharpe', 'my_starters_projection_std', 'my_starters_projection_min', 'my_starters_projection_max']
+    param_grading = param_grading[first_cols + [col for col in param_grading.columns if col not in first_cols]]
 
 
-    best_param_set = param_grading.iloc[0].param_set_id
-    best_params = df_params[df_params.index == best_param_set].iloc[0]
+    # the top index value is the best param set
+    param_cols = ['elite_mean', 'last_starter_mean', 'replacement_mean', 'vopn_mean', 'dynamic_multiplier_mean', 'team_needs_mean']
+    best_param_set = param_grading.index[0]
+    best_params = param_grading[param_grading.index == best_param_set]
     print(f"\nBest param set: {best_param_set}")
-    print(f"Best params: {best_params.to_dict()}")
-    print(f"Best projection: {param_grading.iloc[0].my_starters_projection:.2f}")
+    print(f"Best params:")
+    for col in param_cols:
+        print(f"\t{col}: {best_params[col].values[0]:.2f}")
+    print(f"Best projection: {param_grading.loc[best_param_set, 'my_starters_projection_mean']:.2f}")
+    print(f"Sharpe: {param_grading.loc[best_param_set, 'sharpe']:.2f}")
 
     # save results and param_grading to CSV files
     results_df.to_csv(cfg.CACHE_DIR / "draft_simulation_results.csv", index=False)
@@ -132,8 +139,3 @@ if __name__ == "__main__":
     param_grading.to_parquet(cfg.CACHE_DIR / "draft_simulation_param_grading.parquet", index=False)
     print("\nFull results and param grading saved to cache.")
 
-
-    # Optional: Save results to a file for later analysis
-    # results_output_path = cfg.CACHE_DIR / "draft_simulation_results.csv"
-    # results_df.to_csv(results_output_path, index=False)
-    # print(f"\nFull results saved to: {results_output_path}")

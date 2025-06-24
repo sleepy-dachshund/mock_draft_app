@@ -24,6 +24,9 @@ def static_value_weights_generator() -> np.ndarray:
 
     weights_array = np.array(weights_array, dtype=float)
 
+    # round all weights to 2 decimal places
+    weights_array = np.round(weights_array, 2)
+
     return weights_array
 
 def add_vopn_param(weights_array, param_list: list = None):
