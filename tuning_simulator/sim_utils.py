@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 plt.style.use('fivethirtyeight')
 
 def static_value_weights_generator() -> np.ndarray:
-    step = 1/3
+    step = 0.25
     grid = np.arange(0, 1 + step, step)
 
     # triplets A, B, C with A+B+C == 1.0

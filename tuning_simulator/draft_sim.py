@@ -57,7 +57,7 @@ class DraftFig:
 
 if __name__ == "__main__":
 
-    TEST = True
+    TEST = False
 
     # --- Configuration ---
 
@@ -67,18 +67,18 @@ if __name__ == "__main__":
 
     # PARAMETER SET TO RUN SIMULATIONS ON
     param_array = static_value_weights_generator()
-    param_array = add_vopn_param(param_array, param_list=[2, 5])
-    param_array = add_dynamic_multiplier_param(param_array, param_list=[0.0, 0.8])
-    param_array = add_team_need_param(param_array, param_list=[0.05, 0.8])
+    param_array = add_vopn_param(param_array, param_list=[3, 5])
+    param_array = add_dynamic_multiplier_param(param_array, param_list=[0.75])
+    param_array = add_team_need_param(param_array, param_list=[0.2])
     df_params = param_array_to_df(param_array)
 
     if TEST:
-        df_params_test = df_params.sample(5).reset_index(drop=True)
+        df_params_test = df_params.sample(10).reset_index(drop=True)
         cfg.df_params = df_params_test.copy()  # Use a smaller sample for testing
-        N_SIMULATIONS_PER_SET = 5
+        N_SIMULATIONS_PER_SET = 10
     else:
         cfg.df_params = df_params.copy()  # Make a copy to avoid modifying the original DataFrame
-        N_SIMULATIONS_PER_SET = 30
+        N_SIMULATIONS_PER_SET = 50
 
     # RAW DATA -- PRE-VALUATION
     raw_df = get_raw_df().reset_index(drop=True)
@@ -89,6 +89,7 @@ if __name__ == "__main__":
     print(f"Starting simulations for {len(cfg.df_params)} parameter sets.")
     print(f"Each parameter set will be simulated {N_SIMULATIONS_PER_SET} times.")
     print(f'Total of {len(cfg.df_params) * N_SIMULATIONS_PER_SET} simulations will be run.')
+    print(f"This may take about {len(cfg.df_params) * N_SIMULATIONS_PER_SET * 1.5 / 60:.2f} minutes.")
 
     # Run all simulations for all parameter sets
     results_df = run_all_simulations(
@@ -133,9 +134,54 @@ if __name__ == "__main__":
     print(f"Sharpe: {param_grading.loc[best_param_set, 'sharpe']:.2f}")
 
     # save results and param_grading to CSV files
-    results_df.to_csv(cfg.CACHE_DIR / "draft_simulation_results.csv", index=False)
-    param_grading.to_csv(cfg.CACHE_DIR / "draft_simulation_param_grading.csv", index=False)
-    results_df.to_parquet(cfg.CACHE_DIR / "draft_simulation_results.parquet", index=False)
-    param_grading.to_parquet(cfg.CACHE_DIR / "draft_simulation_param_grading.parquet", index=False)
+    results_df.to_csv(cfg.CACHE_DIR / "draft_simulation_results_new.csv", index=False)
+    param_grading.to_csv(cfg.CACHE_DIR / "draft_simulation_param_grading_new.csv", index=False)
+    results_df.to_parquet(cfg.CACHE_DIR / "draft_simulation_results_new.parquet", index=False)
+    param_grading.to_parquet(cfg.CACHE_DIR / "draft_simulation_param_grading_new.parquet", index=False)
     print("\nFull results and param grading saved to cache.")
+
+    # quick ridge regression to see how params affect the projection
+    features = ['elite', 'last_starter', 'replacement', 'vopn', 'dynamic_multiplier', 'team_needs']
+    target = 'my_starters_projection'
+
+    X = results_df[features]
+    y = results_df[target]
+
+    # # import Ridge
+    # from sklearn.linear_model import Ridge
+    # ridge_model = Ridge(alpha=10.0)
+    # ridge_model.fit(X, y)
+    # print(f"Ridge regression intercept: {ridge_model.intercept_}")
+    # # print out features: coefficients
+    # for feature, coef in zip(features, ridge_model.coef_):
+    #     print(f"Coefficient for {feature}: {coef:.2f}")
+    # print(f"Ridge regression score: {ridge_model.score(X, y)}")
+
+    # # import random forest regressor and get feature importances
+    # from sklearn.ensemble import RandomForestRegressor
+    # rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+    # rf_model.fit(X, y)
+    # importances = rf_model.feature_importances_
+    # # convert importances to a DataFrame
+    # importances_df = pd.DataFrame({'feature': features, 'importance': importances})
+    # # add coefficients to the DataFrame
+    # importances_df['coefficient'] = rf_model.estimators_[0].feature_importances_
+    # importances_df = importances_df.sort_values(by='importance', ascending=False)
+    # # print out features: importances
+    # for feature, importance, coefficient in zip(importances_df['feature'], importances_df['importance'], importances_df['coefficient']):
+    #     print(f"Importance for {feature}: {importance:.2f} (coefficient: {coefficient:.2f})")
+    # print(f"Random Forest regression score: {rf_model.score(X, y)}")
+    # print(f"Random Forest regression R^2: {rf_model.score(X, y)}")
+
+    # for each feature, group results_df and calculate the mean, std and Sharpe of the projection
+    for feature in features:
+        grouped = results_df.groupby(feature).agg({
+            'my_starters_projection': ['mean', 'std', 'min', 'max'],
+            'rank_proj': 'mean',
+            'rank_static': 'mean'
+        })
+        grouped.columns = ['_'.join(col).strip() for col in grouped.columns.values]
+        grouped['sharpe'] = grouped['my_starters_projection_mean'] / grouped['my_starters_projection_std']
+        print(f"\nGrouped by {feature}:")
+        print(grouped.sort_values(by='my_starters_projection_mean', ascending=False))
 
