@@ -242,9 +242,9 @@ def run_all_simulations(
 
     all_results = []
     for param_set_id, param_set in df_params.iterrows():
+        print(f"Processing Param Set {param_set_id} ({df_params.index.get_loc(param_set_id) + 1}/{len(df_params)})...")
         for i in range(1, n_sims + 1):
             input_df = base_df_players.copy()
-            print(f"Running Sim {i}/{n_sims} for Param Set {param_set_id}...")
             final_draft_df, input_draft_df = simulate_one_draft(param_set, input_df, draft_cfg)
             result = evaluate_draft(final_draft_df, param_set, i, draft_cfg)
             all_results.append(result)
