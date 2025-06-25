@@ -2,6 +2,7 @@ import requests
 import json
 import pandas as pd
 import numpy as np
+import config
 
 def pull_adp(year: int = 2025, teams: int = 10, position: str = 'all') -> pd.DataFrame:
     """
@@ -175,9 +176,9 @@ def _add_id_col(df: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         DataFrame with the ID column added.
     """
-    df['player_id'] = (df['team'] + "_" +
-                       df['position'] + "_" +  # df['rank_by_team_pos'] + "_" +
-                       df['player'].str.replace(r'\s+', '', regex=True).str.replace(r'[^\w\s]', '',regex=True).str[:5])
+    df['id'] = (df['team'] + "_" +
+                df['position'] + "_" +  # df['rank_by_team_pos'] + "_" +
+                df['player'].str.replace(r'\s+', '', regex=True).str.replace(r'[^\w\s]', '',regex=True).str[:5])
     return df
 
 def clean_adp_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -199,7 +200,7 @@ def clean_adp_df(df: pd.DataFrame) -> pd.DataFrame:
     df = _standardize_position_abbreviations(df)
     df = _make_numeric_cols(df)
     df = _add_id_col(df)
-    df = df[['player_id', 'player', 'team', 'position', 'adp', 'high', 'low', 'stdev']].copy()
+    df = df[['id', 'player', 'team', 'position', 'adp', 'high', 'low', 'stdev']].copy()
 
     return df
 

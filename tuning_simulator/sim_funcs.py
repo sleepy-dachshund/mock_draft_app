@@ -5,9 +5,9 @@ import config
 from gen_values import value_players, get_raw_df
 
 def simulate_one_draft(
-    param_set: pd.Series,
-    df_players: pd.DataFrame,
-    draft_cfg: "DraftFig"
+        param_set: pd.Series,
+        df_players: pd.DataFrame,
+        draft_cfg: "DraftFig"
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Simulates a single fantasy football draft for a given parameter set.
@@ -52,9 +52,9 @@ def simulate_one_draft(
     return live_draft_df, input_draft_df
 
 def make_a_pick(
-    live_draft_df: pd.DataFrame,
-    pick: int,
-    draft_cfg: "DraftFig"
+        live_draft_df: pd.DataFrame,
+        pick: int,
+        draft_cfg: "DraftFig"
 ) -> (int, str):
     """
     Selects a player based on the current pick number.
@@ -75,6 +75,7 @@ def make_a_pick(
         player_drafted_id = live_draft_df.loc[player_drafted_idx, 'id']
     else:
         # Opponent teams draft based on a simplified ADP-like strategy
+        # TODO: add adp logic: 'adp', 'stdev', 'high', 'low'
         top_n = 15
         if pick <= 10:
             top_n = 3
@@ -171,6 +172,10 @@ def evaluate_draft(
         Dict[str, Any]: A dictionary summarizing the draft results.
     """
     my_team_df = completed_draft_df[completed_draft_df['drafted'].isin(draft_cfg.my_picks)].copy()
+
+    # when ADP > drafted, player was drafted ahead of their ADP, so lucky_factor is negative (reached)
+    my_team_df['lucky_factor'] = (my_team_df['drafted'] - my_team_df['adp']) / my_team_df['stdev']
+
     my_starters = _get_team_starters(my_team_df, draft_cfg)
 
     my_starters_projection = my_starters['median_projection'].sum()
@@ -210,11 +215,20 @@ def evaluate_draft(
     final_results = {
         'param_set_id': param_set.name,
         'sim_num': sim_count,
-        'my_starters_projection': my_starters_projection,
-        'my_starters_static_value': my_starters_static_value,
+        'total_proj': my_starters_projection,
+        'total_value': my_starters_static_value,
+        'luck_mean': my_starters.lucky_factor.mean(),
+        'luck_std': my_starters.lucky_factor.std(),
+        'luck_max': my_starters.lucky_factor.max(),
+        'luck_min': my_starters.lucky_factor.min(),
         'rank_proj': rank_proj,
         'rank_static': rank_static,
         'top_5_picks': my_team_df.nsmallest(5, 'drafted')['player'].tolist(),
+        'qb': my_starters[my_starters['position'] == 'QB']['player'].tolist(),
+        'rb': my_starters[my_starters['position'] == 'RB']['player'].tolist(),
+        'wr': my_starters[my_starters['position'] == 'WR']['player'].tolist(),
+        'te': my_starters[my_starters['position'] == 'TE']['player'].tolist(),
+        'luckiest_picks': my_team_df.nlargest(3, 'lucky_factor')['player'].tolist(),
         **param_set.to_dict()
     }
     final_results.update(param_set.to_dict())
@@ -222,10 +236,11 @@ def evaluate_draft(
     return final_results
 
 def run_all_simulations(
-    df_params: pd.DataFrame,
-    base_df_players: pd.DataFrame,
-    draft_cfg: "DraftFig",
-    n_sims: int
+        df_params: pd.DataFrame,
+        base_df_players: pd.DataFrame,
+        draft_cfg: "DraftFig",
+        n_sims: int,
+        df_adp: pd.DataFrame
 ) -> pd.DataFrame:
     """
     Runs draft simulations for each parameter set and collects the results.
@@ -235,10 +250,12 @@ def run_all_simulations(
         base_df_players (pd.DataFrame): The base dataframe of players and their projections.
         draft_cfg (DraftFig): The draft configuration object.
         n_sims (int): The number of simulations to run for each parameter set.
+        df_adp (pd.DataFrame): Dataframe containing ADP data for players.
 
     Returns:
         pd.DataFrame: A dataframe containing the results of all simulations.
     """
+    base_df_players = base_df_players.merge(df_adp.drop(columns=['player', 'team', 'position']), how='left', on='id', validate='1:1')
 
     all_results = []
     for param_set_id, param_set in df_params.iterrows():
@@ -246,17 +263,8 @@ def run_all_simulations(
         for i in range(1, n_sims + 1):
             input_df = base_df_players.copy()
             final_draft_df, input_draft_df = simulate_one_draft(param_set, input_df, draft_cfg)
+            final_draft_df = final_draft_df.merge(df_adp.drop(columns=['player', 'team', 'position']), how='left', on='id', validate='1:1')
             result = evaluate_draft(final_draft_df, param_set, i, draft_cfg)
             all_results.append(result)
-
-    # results_df = pd.DataFrame(all_results)
-    #
-    # all_results = []
-    # for param_set_id, param_set in df_params.iterrows():
-    #     for i in range(1, n_sims + 1):
-    #         print(f"Running Sim {i}/{n_sims} for Param Set {param_set_id}...")
-    #         final_draft_df = simulate_one_draft(param_set, base_df_players, draft_cfg)
-    #         result = evaluate_draft(final_draft_df, param_set, i, draft_cfg)
-    #         all_results.append(result)
 
     return pd.DataFrame(all_results)

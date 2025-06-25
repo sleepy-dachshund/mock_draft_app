@@ -26,6 +26,7 @@ from sim_funcs import (simulate_one_draft, make_a_pick, check_filled_starters,
 class DraftFig:
     PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]  # Gets from 'tuning_simulator' to 'fantasy_football'
     CACHE_DIR: Path = PROJECT_ROOT / "data" / "draft_sims"
+    YEAR: int = config.SEASON_YEAR  # e.g., 2025
 
     proj_col_prefix: str = config.PROJECTION_COLUMN_PREFIX  # e.g., 'proj_'
 
@@ -57,7 +58,7 @@ class DraftFig:
 
 if __name__ == "__main__":
 
-    TEST = False
+    TEST = True
 
     # --- Configuration ---
 
@@ -73,9 +74,9 @@ if __name__ == "__main__":
     df_params = param_array_to_df(param_array)
 
     if TEST:
-        df_params_test = df_params.sample(10).reset_index(drop=True)
+        df_params_test = df_params.sample(5).reset_index(drop=True)
         cfg.df_params = df_params_test.copy()  # Use a smaller sample for testing
-        N_SIMULATIONS_PER_SET = 10
+        N_SIMULATIONS_PER_SET = 5
     else:
         cfg.df_params = df_params.copy()  # Make a copy to avoid modifying the original DataFrame
         N_SIMULATIONS_PER_SET = 50
@@ -91,9 +92,9 @@ if __name__ == "__main__":
         df_adp = pd.read_csv(output_path)
     except FileNotFoundError:
         from pull_adp import pull_adp, clean_adp_df, save_adp_data
-        df_adp = clean_adp_df(pull_adp(year=config.SEASON_YEAR, teams=config.N_TEAMS, position='all'))
+        df_adp = clean_adp_df(pull_adp(year=cfg.YEAR, teams=cfg.n_teams, position='all'))
         save_adp_data(df_adp)
-        
+
     # from gen_values import value_players
 
     # --- Execution ---
@@ -107,15 +108,17 @@ if __name__ == "__main__":
         df_params=cfg.df_params,
         base_df_players=raw_df.copy(),
         draft_cfg=cfg,
-        n_sims=N_SIMULATIONS_PER_SET
-    ).sort_values(by='my_starters_projection', ascending=False).reset_index(drop=True)
+        n_sims=N_SIMULATIONS_PER_SET,
+        df_adp=df_adp
+    ).sort_values(by='total_proj', ascending=False).reset_index(drop=True)
 
     # --- Output ---
     print("\nSimulation complete.")
 
     param_grading = results_df.groupby('param_set_id').agg({
-        'my_starters_projection': ['mean', 'std', 'min', 'max'],
-        'my_starters_static_value': 'mean',
+        'total_proj': ['mean', 'std', 'min', 'max'],
+        'total_value': 'mean',
+        'luck_mean': 'mean',
         'rank_proj': 'mean',
         'rank_static': 'mean',
         'elite': 'mean',
@@ -124,12 +127,12 @@ if __name__ == "__main__":
         'vopn': 'mean',
         'dynamic_multiplier': 'mean',
         'team_needs': 'mean',
-    })
+    }).round(2)
     # collapse multi-index columns
     param_grading.columns = ['_'.join(col) for col in param_grading.columns.to_flat_index()]
-    param_grading['sharpe'] = param_grading['my_starters_projection_mean'] / param_grading['my_starters_projection_std']
-    param_grading = param_grading.sort_values(by='my_starters_projection_mean', ascending=False)
-    first_cols = ['my_starters_projection_mean', 'sharpe', 'my_starters_projection_std', 'my_starters_projection_min', 'my_starters_projection_max']
+    param_grading['sharpe'] = (param_grading['total_proj_mean'] / param_grading['total_proj_std']).round(2)
+    param_grading = param_grading.sort_values(by='total_proj_mean', ascending=False)
+    first_cols = ['total_proj_mean', 'sharpe', 'total_proj_std', 'total_proj_min', 'total_proj_max']
     param_grading = param_grading[first_cols + [col for col in param_grading.columns if col not in first_cols]]
 
 
@@ -141,19 +144,20 @@ if __name__ == "__main__":
     print(f"Best params:")
     for col in param_cols:
         print(f"\t{col}: {best_params[col].values[0]:.2f}")
-    print(f"Best projection: {param_grading.loc[best_param_set, 'my_starters_projection_mean']:.2f}")
+    print(f"Best projection: {param_grading.loc[best_param_set, 'total_proj_mean']:.2f}")
     print(f"Sharpe: {param_grading.loc[best_param_set, 'sharpe']:.2f}")
 
     # save results and param_grading to CSV files
-    results_df.to_csv(cfg.CACHE_DIR / "draft_simulation_results_new.csv", index=False)
-    param_grading.to_csv(cfg.CACHE_DIR / "draft_simulation_param_grading_new.csv", index=False)
-    results_df.to_parquet(cfg.CACHE_DIR / "draft_simulation_results_new.parquet", index=False)
-    param_grading.to_parquet(cfg.CACHE_DIR / "draft_simulation_param_grading_new.parquet", index=False)
-    print("\nFull results and param grading saved to cache.")
+    if not TEST:
+        results_df.to_csv(cfg.CACHE_DIR / "draft_simulation_results_new.csv", index=False)
+        param_grading.to_csv(cfg.CACHE_DIR / "draft_simulation_param_grading_new.csv", index=False)
+        results_df.to_parquet(cfg.CACHE_DIR / "draft_simulation_results_new.parquet", index=False)
+        param_grading.to_parquet(cfg.CACHE_DIR / "draft_simulation_param_grading_new.parquet", index=False)
+        print("\nFull results and param grading saved to cache.")
 
     # quick ridge regression to see how params affect the projection
     features = ['elite', 'last_starter', 'replacement', 'vopn', 'dynamic_multiplier', 'team_needs']
-    target = 'my_starters_projection'
+    target = 'total_proj'
 
     X = results_df[features]
     y = results_df[target]
@@ -184,15 +188,15 @@ if __name__ == "__main__":
     # print(f"Random Forest regression score: {rf_model.score(X, y)}")
     # print(f"Random Forest regression R^2: {rf_model.score(X, y)}")
 
-    # for each feature, group results_df and calculate the mean, std and Sharpe of the projection
-    for feature in features:
-        grouped = results_df.groupby(feature).agg({
-            'my_starters_projection': ['mean', 'std', 'min', 'max'],
-            'rank_proj': 'mean',
-            'rank_static': 'mean'
-        })
-        grouped.columns = ['_'.join(col).strip() for col in grouped.columns.values]
-        grouped['sharpe'] = grouped['my_starters_projection_mean'] / grouped['my_starters_projection_std']
-        print(f"\nGrouped by {feature}:")
-        print(grouped.sort_values(by='my_starters_projection_mean', ascending=False))
+    # # for each feature, group results_df and calculate the mean, std and Sharpe of the projection
+    # for feature in features:
+    #     grouped = results_df.groupby(feature).agg({
+    #         'my_starters_projection': ['mean', 'std', 'min', 'max'],
+    #         'rank_proj': 'mean',
+    #         'rank_static': 'mean'
+    #     })
+    #     grouped.columns = ['_'.join(col).strip() for col in grouped.columns.values]
+    #     grouped['sharpe'] = grouped['my_starters_projection_mean'] / grouped['my_starters_projection_std']
+    #     print(f"\nGrouped by {feature}:")
+    #     print(grouped.sort_values(by='my_starters_projection_mean', ascending=False))
 
