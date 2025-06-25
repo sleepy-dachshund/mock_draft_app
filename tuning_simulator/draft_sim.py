@@ -83,6 +83,17 @@ if __name__ == "__main__":
     # RAW DATA -- PRE-VALUATION
     raw_df = get_raw_df().reset_index(drop=True)
 
+    # SUPPLEMENTARY ADP DATA
+    try:
+        import datetime
+        today = datetime.date.today().strftime("%Y%m%d")
+        output_path = config.OUTPUT_DIR / f"{today}_adp.csv"
+        df_adp = pd.read_csv(output_path)
+    except FileNotFoundError:
+        from pull_adp import pull_adp, clean_adp_df, save_adp_data
+        df_adp = clean_adp_df(pull_adp(year=config.SEASON_YEAR, teams=config.N_TEAMS, position='all'))
+        save_adp_data(df_adp)
+        
     # from gen_values import value_players
 
     # --- Execution ---
