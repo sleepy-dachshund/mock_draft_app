@@ -202,6 +202,14 @@ def clean_adp_df(df: pd.DataFrame) -> pd.DataFrame:
     df = _add_id_col(df)
     df = df[['id', 'player', 'team', 'position', 'adp', 'high', 'low', 'stdev']].copy()
 
+    # if position = 'QB' and 'high' is < 17 then set to 17
+    df.loc[(df['position'] == 'QB') & (df['high'] < 21), 'high'] = 21
+    df.loc[(df['position'] == 'QB') & (df['high'] == 21), 'low'] = 35
+
+    # if position = 'TE' and 'high' is < 12 then set to 12
+    df.loc[(df['position'] == 'TE') & (df['high'] < 11), 'high'] = 11
+    df.loc[(df['position'] == 'TE') & (df['high'] == 11), 'low'] = 23
+
     return df
 
 def save_adp_data(df: pd.DataFrame) -> None:

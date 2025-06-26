@@ -17,7 +17,10 @@ class ProjectionValueCalculator:
     player projections to baseline thresholds for each position.
     """
 
-    def __init__(self, df: DataFrame, projection_column_prefix: str = 'projection_'):
+    def __init__(self, df: DataFrame,
+                 projection_column_prefix: str = 'projection_',
+                 filled_roster_spots: list = None,
+                 team_needs_adjustment: float = 1.0):
         """
         Initialize the calculator with a dataframe containing player projections.
 
@@ -39,9 +42,9 @@ class ProjectionValueCalculator:
             logger.warning(f"No projection columns found with prefix '{projection_column_prefix}'")
 
         # Calculate aggregate projections
-        self._calculate_aggregate_projections()
+        self._calculate_aggregate_projections(filled_roster_spots=filled_roster_spots, team_needs_adjustment=team_needs_adjustment)
 
-    def _calculate_aggregate_projections(self) -> None:
+    def _calculate_aggregate_projections(self, filled_roster_spots: list = None, team_needs_adjustment: float = 1.0) -> None:
         """Calculate median, high, and low projections across all baseline projections."""
         self.df['median_projection'] = self.df[self.projection_cols].median(axis=1).round(1)
         self.df['high_projection'] = self.df[self.projection_cols].max(axis=1).round(1)
@@ -49,6 +52,13 @@ class ProjectionValueCalculator:
 
         # Create available_PPR for dynamic_value and draft_value
         self.df['available_pts'] = np.where(self.df['drafted'] >= 1, 0, self.df['median_projection'])
+
+        # Adjust available_pts based on filled roster spots (lower available_pts for positions that have been filled already)
+        if filled_roster_spots is not None:
+            for position in filled_roster_spots:
+                self.df['available_pts'] = np.where(self.df['position'] == position,
+                                                    self.df['available_pts'] * team_needs_adjustment,
+                                                    self.df['available_pts'])
 
         # Sort by median projection
         self.df.sort_values(by='median_projection', ascending=False, inplace=True)
@@ -111,7 +121,7 @@ class ProjectionValueCalculator:
         return self.df
 
     def add_vop_columns(self,
-                        projection_column: str = 'available_pts',  # note available_pts is used for live draft_value calcs
+                        projection_column: str = 'available_pts',  # note available_pts is used for live draft_value calcs since it zeroes out when a player has been drafted
                         n: int = 5) -> DataFrame:
         """
         Add VOP (Value Over Player) columns from 1 to N.
@@ -194,9 +204,9 @@ class ProjectionValueCalculator:
         self.df['dynamic_value'] = (self.df['dynamic_value'] / self.df['dynamic_value'].max() * 100).round(1)
 
     def calc_static_value(self,
-                          weight_elite: float = 1/3,
-                          weight_starter: float = 1/3,
-                          weight_replacement: float = 1/3) -> None:
+                          weight_elite: float = 0.10,
+                          weight_starter: float = 0.75,
+                          weight_replacement: float = 0.15) -> None:
         """
         Calculate static value based on the specified value column.
 
@@ -242,7 +252,7 @@ class ProjectionValueCalculator:
             self.df['draft_value'] = np.where(self.df['dynamic_value'] > self.df['static_value'], (self.df['static_value'] + self.df['dynamic_value'] * dynamic_multiplier), self.df['static_value'])
 
             # if drafting, only available players have value
-            self.df['draft_value'] = np.where(self.df['drafted'] >= 1, 0, self.df['draft_value'])
+            self.df['draft_value'] = np.where(self.df['drafted'] > 0, 0, self.df['draft_value'])
 
         else:
 
@@ -272,6 +282,10 @@ class ProjectionValueCalculator:
                     + value_cols
                     # + vop_cols + projection_cols
                     )
+
+        for adp_col in ['adp', 'stdev', 'high', 'low']:
+            if adp_col in self.df.columns:
+                all_cols.append(adp_col)
 
         self.df = self.df[all_cols]
 
@@ -350,10 +364,12 @@ def get_raw_df():
     return raw_df[output_cols]
 
 def value_players(df: DataFrame,
-                  static_value_weights: Optional[Dict[str, float]] = None,
+                  static_value_weights: Optional[Dict[str, float]] = {'elite': 0.15, 'last_starter': 0.75, 'replacement': 0.10},
                   projection_column_prefix: str = 'projection_',
                   vopn: int = 10,
                   dynamic_multiplier: float = 0.2,
+                  filled_roster_spots: list = None,
+                  team_needs: float = 1.0,
                   draft_mode: bool = True) -> DataFrame:
     """
     Calculate player values based on projections and thresholds.
@@ -375,7 +391,9 @@ def value_players(df: DataFrame,
         DataFrame with calculated values
     """
     import config
-    calculator = ProjectionValueCalculator(df, projection_column_prefix)  # Initialize calculator
+    calculator = ProjectionValueCalculator(df, projection_column_prefix,
+                                           filled_roster_spots=filled_roster_spots,
+                                           team_needs_adjustment=team_needs)  # Initialize calculator
 
     ls_qb = config.ROSTER_N_QB * config.N_TEAMS
     ls_rb = int(config.ROSTER_N_RB * config.N_TEAMS + (config.ROSTER_N_FLEX * config.N_TEAMS * 1/5))

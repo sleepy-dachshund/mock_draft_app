@@ -1,5 +1,6 @@
 import pandas as pd
-from typing import Dict, List, Any, Tuple
+import numpy as np
+from typing import Dict, List, Any, Tuple, Set
 
 import config
 from gen_values import value_players, get_raw_df
@@ -22,6 +23,8 @@ def simulate_one_draft(
     """
     input_draft_df = df_players.copy()
     input_draft_df['drafted'] = 0
+    # TODO: add keepers here if needed
+
     filled_starter_positions = []
 
     for pick in range(1, draft_cfg.n_picks + 1):
@@ -51,6 +54,118 @@ def simulate_one_draft(
 
     return live_draft_df, input_draft_df
 
+def _get_team_for_pick(
+    pick: int,
+    other_teams_picks_dict: Dict[int, List[int]]
+) -> int:
+    """
+    Finds the team number corresponding to a given draft pick.
+
+    Args:
+        pick (int): The current overall pick number.
+        other_teams_picks_dict (Dict[int, List[int]]):
+            A dictionary mapping team numbers to their list of picks.
+
+    Returns:
+        int: The team number that owns the pick.
+    """
+    for team_num, picks_list in other_teams_picks_dict.items():
+        if pick in picks_list:
+            return team_num
+    return -1 # Should not happen in a valid draft
+
+def _get_roster_needs(
+    team_df: pd.DataFrame,
+    draft_cfg: "DraftFig"
+) -> List[str]:
+    """
+    Determines a team's remaining open starting roster spots.
+
+    Args:
+        team_starters_df (pd.DataFrame):
+            A DataFrame of players in the team's starting lineup.
+        draft_cfg (DraftFig): The draft configuration object.
+
+    Returns:
+        Set[str]: A set of position strings (e.g., {'QB', 'RB'}) that
+                  are not yet filled in the starting roster.
+    """
+    needs = set()
+    position_counts = team_df['position'].value_counts().to_dict()
+
+    if position_counts.get('QB', 0) < draft_cfg.n_qb:
+        needs.add('QB')
+    if position_counts.get('RB', 0) < draft_cfg.n_rb:
+        needs.add('RB')
+    if position_counts.get('WR', 0) < draft_cfg.n_wr:
+        needs.add('WR')
+    if position_counts.get('TE', 0) < draft_cfg.n_te:
+        needs.add('TE')
+
+    # Note: FLEX is handled differently, as it's not a primary position.
+    # We prioritize filling dedicated spots first.
+
+    return list(needs)
+
+
+def _select_opponent_player(
+        available_players_df: pd.DataFrame,
+        pick: int,
+        roster_needs: List[str]
+) -> int:
+    """
+    Selects a player for an opponent based on team needs and ADP.
+
+    Args:
+        available_players_df (pd.DataFrame):
+            DataFrame of players not yet drafted. Must include 'adp',
+            'stdev', and 'position' columns.
+        pick (int): The current overall pick number.
+        roster_needs (Set[str]): A set of positions the team needs to fill.
+
+    Returns:
+        int: The index of the player to be drafted.
+    """
+    target_df = available_players_df.copy()
+
+    # 1. Prioritize filling roster needs
+    if len(roster_needs) > 0:
+        needed_players_df = target_df[target_df['position'].isin(roster_needs)]
+        if not needed_players_df.empty:
+            target_df = needed_players_df
+
+    # 2. Calculate pick likelihood based on a normal distribution around ADP
+    # We use the cumulative density function (CDF).
+    # A player is most likely to be picked around their ADP. Probability stays high if they fall past ADP.
+    mean_adp = target_df['adp']
+    std_dev = target_df['stdev'].fillna(10).replace(0, 10)
+    earliest_pick = target_df['high']
+    latest_pick = target_df['low']
+
+    # Calculate the CDF of the normal distribution
+    from scipy.stats import norm
+    z_score = (pick - mean_adp) / std_dev  # z-score = how far are we from this players sweet spot? (earlier is negative, later is positive)
+    likelihood = norm.cdf(z_score)
+    # if pick << adp, z_score << 0, probability = 0
+    # if pick ~= adp, z_score ~= 0, probability = 0.5
+    # if pick >> adp, z_score >> 0, probability = 1
+
+    # likelihood should be guided such that we stay within realistic pick ranges (high and low)
+    likelihood = np.where(pick < earliest_pick, 0, likelihood)  # No chance of picking before earliest ADP
+    likelihood = np.where(pick > latest_pick, 20, likelihood)  # If pick is after the latest ADP, boost odds significantly
+
+    target_df['pick_likelihood'] = likelihood
+
+    # 3. Make a weighted random selection
+    # Players with a higher likelihood score have a higher chance of being picked.
+    # If all likelihoods are zero (e.g., late in the draft), fall back to best ADP.
+    if target_df['pick_likelihood'].sum() > 0:
+        player_drafted_idx = target_df.sample(1, weights='pick_likelihood').index[0]
+    else:
+        player_drafted_idx = target_df.sort_values(by='adp').index[0]
+
+    return player_drafted_idx
+
 def make_a_pick(
         live_draft_df: pd.DataFrame,
         pick: int,
@@ -68,24 +183,47 @@ def make_a_pick(
         tuple[int, str]: The index and position of the drafted player.
     """
     available_players = live_draft_df['drafted'] == 0
+    assert len(available_players) > 0, "No available players to draft."
     is_my_pick = pick in draft_cfg.my_picks
 
     if is_my_pick:
-        player_drafted_idx = live_draft_df.loc[available_players, 'draft_value'].nlargest(1).index[0]
-        player_drafted_id = live_draft_df.loc[player_drafted_idx, 'id']
+        team_df = live_draft_df[live_draft_df['drafted'].isin(draft_cfg.my_picks)].copy()
+        if team_df.empty:
+            team_roster_needs = ['QB', 'RB', 'WR', 'TE']  # No players drafted yet, fill all needs
+        else:
+            team_roster_needs = _get_roster_needs(team_df, draft_cfg)
+
+        # if team roster needs empty (drafted all starters), fill with best available
+        team_roster_needs = ['QB', 'RB', 'WR', 'TE'] if len(team_roster_needs) == 0 else team_roster_needs
+        my_realistic_picks = live_draft_df.loc[(available_players) & (live_draft_df.high < pick+10) & (live_draft_df.position.isin(team_roster_needs)), :].copy()
+        player_drafted_idx = my_realistic_picks.loc[:, 'draft_value'].nlargest(1).index[0]
     else:
         # Opponent teams draft based on a simplified ADP-like strategy
         # TODO: add adp logic: 'adp', 'stdev', 'high', 'low'
-        top_n = 15
-        if pick <= 10:
-            top_n = 3
-        elif pick <= 25:
-            top_n = 7
-        elif pick <= 40:
-            top_n = 12
-        player_drafted_idx = live_draft_df.loc[available_players, 'draft_value'].nlargest(top_n).sample(1).index[0]
-        player_drafted_id = live_draft_df.loc[player_drafted_idx, 'id']
+        # top_n = 15
+        # if pick <= 10:
+        #     top_n = 3
+        # elif pick <= 25:
+        #     top_n = 7
+        # elif pick <= 40:
+        #     top_n = 12
+        # player_drafted_idx = live_draft_df.loc[available_players, 'draft_value'].nlargest(top_n).sample(1).index[0]
+        # player_drafted_id = live_draft_df.loc[player_drafted_idx, 'id']
 
+        team_num = _get_team_for_pick(pick, draft_cfg.other_teams_picks_dict)
+        teams_picks = draft_cfg.other_teams_picks_dict[team_num]
+        team_df = live_draft_df[live_draft_df['drafted'].isin(teams_picks)].copy()
+        if team_df.empty:
+            team_roster_needs = ['QB', 'RB', 'WR', 'TE']  # No players drafted yet, fill all needs
+        else:
+            team_roster_needs = _get_roster_needs(team_df, draft_cfg)
+        player_drafted_idx = _select_opponent_player(
+            available_players_df=live_draft_df.loc[available_players, :],
+            pick=pick,
+            roster_needs=team_roster_needs
+        )
+
+    player_drafted_id = live_draft_df.loc[player_drafted_idx, 'id']
     drafted_position = live_draft_df.loc[live_draft_df['id'] == player_drafted_id, 'position']
     return player_drafted_id, drafted_position
 
@@ -210,6 +348,8 @@ def evaluate_draft(
     my_team_ranks = league_results_df.loc[draft_cfg.draft_pos]
     rank_proj = int(my_team_ranks['rank_proj'])
     rank_static = int(my_team_ranks['rank_static'])
+    min_proj_team = league_results_df['projection_sum'].min()
+    average_proj_team = league_results_df['projection_sum'].mean()
 
     # Compile the final results dictionary
     final_results = {
@@ -223,13 +363,16 @@ def evaluate_draft(
         'luck_min': my_starters.lucky_factor.min(),
         'rank_proj': rank_proj,
         'rank_static': rank_static,
-        'top_5_picks': my_team_df.nsmallest(5, 'drafted')['player'].tolist(),
+        'worst_proj': min_proj_team,
+        'avg_proj': average_proj_team,
+        'my_top_8_picks': my_team_df.loc[my_team_df['drafted'] != 0].sort_values('drafted').head(8)['player'].tolist(),
         'qb': my_starters[my_starters['position'] == 'QB']['player'].tolist(),
         'rb': my_starters[my_starters['position'] == 'RB']['player'].tolist(),
         'wr': my_starters[my_starters['position'] == 'WR']['player'].tolist(),
         'te': my_starters[my_starters['position'] == 'TE']['player'].tolist(),
         'luckiest_picks': my_team_df.nlargest(3, 'lucky_factor')['player'].tolist(),
-        **param_set.to_dict()
+        **param_set.to_dict(),
+        'first_10_picks': completed_draft_df.loc[completed_draft_df['drafted'] != 0].sort_values('drafted').head(10)['player'].tolist(),
     }
     final_results.update(param_set.to_dict())
 
@@ -263,7 +406,6 @@ def run_all_simulations(
         for i in range(1, n_sims + 1):
             input_df = base_df_players.copy()
             final_draft_df, input_draft_df = simulate_one_draft(param_set, input_df, draft_cfg)
-            final_draft_df = final_draft_df.merge(df_adp.drop(columns=['player', 'team', 'position']), how='left', on='id', validate='1:1')
             result = evaluate_draft(final_draft_df, param_set, i, draft_cfg)
             all_results.append(result)
 
