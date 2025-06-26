@@ -42,7 +42,7 @@ KEEPERS = {
     'ladd mcconkey': 77,
     'jaxon smith-njigba': 78,
     'chuba hubbard': 99,
-    "de'von achane": 105,
+    "devon achane": 105,
     'puka nacua': 132,
     'kyren williams': 133,
     'rashid shaheed': 135
