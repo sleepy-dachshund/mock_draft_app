@@ -366,8 +366,8 @@ def get_raw_df():
 def value_players(df: DataFrame,
                   static_value_weights: Optional[Dict[str, float]] = {'elite': 0.15, 'last_starter': 0.75, 'replacement': 0.10},
                   projection_column_prefix: str = 'projection_',
-                  vopn: int = 10,
-                  dynamic_multiplier: float = 0.2,
+                  vopn: int = 4,
+                  dynamic_multiplier: float = 0.05,
                   filled_roster_spots: list = None,
                   team_needs: float = 1.0,
                   draft_mode: bool = True) -> DataFrame:
