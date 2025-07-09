@@ -1,4 +1,3 @@
-data/input/2025/projections/20250506_DraftSharks.csv
 .DS_Store
 .idea/fantasy_football.iml
 .idea/inspectionProfiles/profiles_settings.xml
@@ -8,5 +7,4 @@ data/input/2025/projections/20250506_DraftSharks.csv
 .idea/vcs.xml
 /logs
 /data/draft_sims
-/data/output
 /data/output
