@@ -136,8 +136,8 @@ def run_model(df):
         value_players(
             df,
             projection_column_prefix=config.PROJECTION_COLUMN_PREFIX,
-            vopn=10,
-            dynamic_multiplier=0.2,
+            vopn=3,
+            dynamic_multiplier=0.05,
             draft_mode=True
         )
         .drop(columns=["id"])

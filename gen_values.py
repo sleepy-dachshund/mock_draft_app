@@ -239,7 +239,7 @@ class ProjectionValueCalculator:
         self.df['rank_pos_team'] = self.df.groupby(['team', 'position'])['median_projection'].rank(ascending=False, method='min')
         self.df['mkt_share'] = (self.df['median_projection'] / self.df.groupby(['team', 'position'])['median_projection'].transform('sum') * 100).round(1)
 
-    def combine_static_and_dynamic_value(self, draft_mode: bool = True, dynamic_multiplier: float = 0.2) -> None:
+    def combine_static_and_dynamic_value(self, draft_mode: bool = True, dynamic_multiplier: float = 0.05) -> None:
         """
         Combine static and dynamic values into a single column.
         """
@@ -364,7 +364,7 @@ def get_raw_df():
     return raw_df[output_cols]
 
 def value_players(df: DataFrame,
-                  static_value_weights: Optional[Dict[str, float]] = {'elite': 0.15, 'last_starter': 0.75, 'replacement': 0.10},
+                  static_value_weights: Optional[Dict[str, float]] = {'elite': 0.10, 'last_starter': 0.75, 'replacement': 0.15},
                   projection_column_prefix: str = 'projection_',
                   vopn: int = 4,
                   dynamic_multiplier: float = 0.05,
@@ -378,10 +378,18 @@ def value_players(df: DataFrame,
     ----------
     df : DataFrame
         DataFrame containing player projection data
+    static_value_weights : Dict[str, float], optional
+        Weights for averaging of static value columns, by default {'elite': 0.10, 'last_starter': 0.75, 'replacement': 0.15}
     projection_column_prefix : str, optional
         Prefix used to identify projection columns, by default 'projection_'
     vopn : int, optional
         Number of VOP columns to calculate, by default 5
+    dynamic_multiplier : float, optional
+        Multiplier for dynamic value, by default 0.05
+    filled_roster_spots : list, optional
+        List of filled roster spots, by default None
+    team_needs : float, optional
+        Team needs multiplier, by default 1.0
     draft_mode : bool, optional
         Whether to adjust for scarcity during draft, by default True
 
@@ -444,8 +452,8 @@ if __name__ == "__main__":
         'last_starter': 1 / 3,
         'replacement': 1 / 3,
     }
-    vopn = 5
-    dynamic_multiplier = 0.2
+    vopn = 3
+    dynamic_multiplier = 0.05
     # ====================================== #
 
     # Calculate player values
