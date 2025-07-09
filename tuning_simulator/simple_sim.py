@@ -64,8 +64,8 @@ if __name__ == "__main__":
     '''
         DRAFT CONFIG OBJECT
     '''
-    cfg = DraftFig()
-    cfg.other_teams_picks_dict = {i: get_my_picks_list(cfg.n_rounds, cfg.n_teams, i) for i in range(1, cfg.n_teams + 1) if i != cfg.draft_pos}
+    draft_cfg = DraftFig()
+    draft_cfg.other_teams_picks_dict = {i: get_my_picks_list(draft_cfg.n_rounds, draft_cfg.n_teams, i) for i in range(1, draft_cfg.n_teams + 1) if i != draft_cfg.draft_pos}
 
     '''
         LOAD ADP DATA
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         df_adp = pd.read_csv(output_path)
     except FileNotFoundError:
         from pull_adp import pull_adp, clean_adp_df, save_adp_data
-        df_adp = clean_adp_df(pull_adp(year=cfg.YEAR, teams=cfg.n_teams, position='all'))
+        df_adp = clean_adp_df(pull_adp(year=draft_cfg.YEAR, teams=draft_cfg.n_teams, position='all'))
         save_adp_data(df_adp)
 
     input_df = raw_df.merge(df_adp.drop(columns=['player', 'team', 'position']), how='left', on='id', validate='1:1')
@@ -89,7 +89,7 @@ if __name__ == "__main__":
                                   'last_starter': 0.75,
                                   'replacement': 0.15},
             vopn=5,
-            projection_column_prefix=cfg.proj_col_prefix,
+            projection_column_prefix=draft_cfg.proj_col_prefix,
             dynamic_multiplier=0.05,
             filled_roster_spots=filled_starter_positions,
             team_needs=1.0,
