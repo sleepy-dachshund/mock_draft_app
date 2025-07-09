@@ -42,7 +42,7 @@ KEEPERS = {
     'ladd mcconkey': 77,
     'jaxon smith-njigba': 78,
     'chuba hubbard': 99,
-    "devon achane": 105,
+    "de'von achane": 105,
     'puka nacua': 132,
     'kyren williams': 133,
     'rashid shaheed': 135
@@ -65,9 +65,35 @@ def initialize_draft_state():
     raw_df = raw_df.assign(drafted=0)
 
     # Mark keepers as drafted if enabled
+    # Mark keepers as drafted if enabled
     if ADD_KEEPERS:
+        # Create a normalized version of player names in the dataframe
+        raw_df['player_normalized'] = (raw_df['player']
+                                       .str.lower()
+                                       .str.replace("'", "", regex=False)
+                                       .str.replace("-", " ", regex=False)
+                                       .str.replace(".", "", regex=False)
+                                       .str.strip())
+
         for player, pick_num in KEEPERS.items():
-            raw_df.loc[raw_df['player'] == player, 'drafted'] = pick_num
+            # Try exact match first
+            if player in raw_df['player'].values:
+                raw_df.loc[raw_df['player'] == player, 'drafted'] = pick_num
+            else:
+                # Try normalized match
+                player_normalized = (player.lower()
+                                     .replace("'", "")
+                                     .replace("-", " ")
+                                     .replace(".", "")
+                                     .strip())
+
+                matches = raw_df['player_normalized'] == player_normalized
+                if matches.any():
+                    raw_df.loc[matches, 'drafted'] = pick_num
+                else:
+                    st.warning(f"Keeper '{player}' not found in player list. Please check the name in utils_app.py.")
+
+        raw_df.drop('player_normalized', axis=1, inplace=True)
 
     # Store in session state
     st.session_state["base_df"] = raw_df
