@@ -26,6 +26,11 @@ class DraftAnalyzer:
     def roster_table(self) -> pd.DataFrame:
         """Return table indexed by QB1, RB1 … BNn."""
         starters, bench = self._split_starters_bench()
+
+        if starters.empty and bench.empty:
+            return pd.DataFrame(columns=["player", "position", "team", "rank_pos",
+                                         "median_projection", "static_value", "round_drafted"])
+
         table = pd.concat([starters, bench]).reindex(self.lineup_slots)
         return table[["player", "position", "team", "rank_pos",
                       "median_projection", "static_value", "round_drafted"]]
@@ -33,6 +38,8 @@ class DraftAnalyzer:
     def pos_sums(self) -> Dict[str, float]:
         """Median-projection sums for my starting groups."""
         starters, _ = self._split_starters_bench()
+        if starters.empty:
+            return {}
         return starters.groupby("slot_group")["median_projection"].sum().to_dict()
 
     def strength_scores(self):
@@ -98,18 +105,25 @@ class DraftAnalyzer:
                 grp, slots_left["FLEX"] = "FLEX", slots_left["FLEX"] - 1
 
             if grp:
-                row["slot_group"] = grp
-                starters_rows.append(row)
-                starter_idx.append(idx)          # track originals
+                row_dict = row.to_dict()
+                row_dict["slot_group"] = grp
+                starters_rows.append(row_dict)
+                starter_idx.append(idx)
 
-        starters_df = (
-            pd.DataFrame(starters_rows)
-              .assign(slot=lambda x: x.groupby("slot_group").cumcount() + 1)
-              .assign(index=lambda x: x.apply(
-                  lambda r: f"{r.slot_group}{r.slot}" if r.slot_group != "QB" else "QB1",
-                  axis=1))
-              .set_index("index")
-        )
+        starters_df = pd.DataFrame(starters_rows)
+
+        if not starters_df.empty:
+            starters_df = (
+                starters_df
+                .assign(slot=lambda x: x.groupby("slot_group").cumcount() + 1)
+                .assign(index=lambda x: x.apply(
+                    lambda r: f"{r.slot_group}{r.slot}" if r.slot_group != "QB" else "QB1",
+                    axis=1))
+                .set_index("index")
+            )
+        else:
+            # Handle case where no starters have been drafted yet
+            starters_df = pd.DataFrame()
 
         # use original row indices to exclude starters
         bench_df = df.loc[~df.index.isin(starter_idx)].copy()
