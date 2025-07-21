@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os
 import logging
 from typing import Dict, Optional
 from pandas import DataFrame
@@ -431,6 +432,19 @@ def value_players(df: DataFrame,
     calculator.combine_static_and_dynamic_value(draft_mode=draft_mode, dynamic_multiplier=dynamic_multiplier)  # Combine static and dynamic values to get draft_value
     # todo: add ADP column
     calculator.order_columns()  # Order columns for better readability
+
+    # cache simple cheat sheet
+    df_cache = (calculator
+            .get_dataframe()
+            .sort_values(by=['static_value', 'value_last_starter', 'value_replacement', 'median_projection'],
+                         ascending=[False, False, False, False])
+            .reset_index(drop=True))
+    today_str = pd.Timestamp.now().strftime('%Y%m%d')
+    file_directory = config.PROCESSED_DIR
+    file_path = f'{today_str}_cheat_sheet.xlsx'
+    file_to_check = file_directory / file_path
+    if not os.path.exists(file_to_check):
+        df_cache.to_excel(file_to_check, index=False)
 
     return (calculator
             .get_dataframe()

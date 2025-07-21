@@ -35,18 +35,34 @@ POS_COLORS = {
 
 # Keeper settings
 ADD_KEEPERS = True
-KEEPERS = {
-    'breece hall': 21,
-    'terry mclaurin': 50,
-    'jayden daniels': 74,
-    'ladd mcconkey': 77,
-    'jaxon smith-njigba': 78,
-    'chuba hubbard': 99,
-    "de'von achane": 105,
-    'puka nacua': 132,
-    'kyren williams': 133,
-    'rashid shaheed': 135
-}
+LEAGUE = 'landon'  # landon or usc
+
+if LEAGUE == 'landon':
+    KEEPERS = {
+        'bucky irving': 140,
+        "de'von achane": 102,
+        'kyren williams': 143,
+        'ladd mcconkey': 77,
+        'jayden daniels': 76,
+        'terry mclaurin': 46,
+        'puka nacua': 147,
+        'trey mcbride': 148,
+        'chuba hubbard': 92,
+        'courtland sutton': 71
+    }
+else:
+    KEEPERS = {
+        'breece hall': 21,
+        'terry mclaurin': 50,
+        'jayden daniels': 74,
+        'ladd mcconkey': 77,
+        'jaxon smith-njigba': 78,
+        'chuba hubbard': 99,
+        "de'von achane": 105,
+        'puka nacua': 132,
+        'kyren williams': 133,
+        'rashid shaheed': 135
+    }
 
 def initialize_draft_state():
     """
